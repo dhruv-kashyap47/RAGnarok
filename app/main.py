@@ -10,8 +10,10 @@ import os
 from app.core.config import ALLOW_CREDENTIALS, CORS_ORIGINS
 from app.core.exceptions import http_exception_handler, general_exception_handler
 from app.api.user import router as user_router
+from app.db.database import Base, engine
+from app.models import user, documents
 
-app = FastAPI(title="RAGproject")
+app = FastAPI(title="RAGnarok")
 
 os.makedirs("static", exist_ok=True)
 
@@ -67,3 +69,8 @@ async def health():
         "status": "ok",
         "cors_origins": CORS_ORIGINS,
     }
+
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

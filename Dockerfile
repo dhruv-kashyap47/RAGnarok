@@ -27,4 +27,4 @@ COPY . .
 EXPOSE 10000
 
 # ---- Start Command (Render-friendly + DB-safe) ----
-CMD ["sh", "-c", "python -m app.init_db && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]
