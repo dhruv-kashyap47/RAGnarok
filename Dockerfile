@@ -22,9 +22,10 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # ---- Copy App ----
 COPY . .
+RUN chmod +x /app/start.sh
 
 # ---- Expose Port ----
 EXPOSE 10000
 
 # ---- Start Command (Render-friendly + DB-safe) ----
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]
+CMD ["/app/start.sh"]
