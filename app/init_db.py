@@ -1,5 +1,8 @@
-from app.db.base import Base
-from app.db.session import engine
+from app.db.database import Base
+from app.db.database import engine
+
+# 🔥 IMPORT ALL MODELS (THIS IS THE KEY FIX)
+from app.models import user, documents
 
 import asyncio
 
