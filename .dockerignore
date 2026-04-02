@@ -1,0 +1,12 @@
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+.git/
+.gitignore
+.vscode/
+.idea/
+*.log
+tmp_test_doc.pdf
