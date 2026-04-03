@@ -19,15 +19,21 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+from sqlalchemy.engine.reflection import Inspector
+
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-    op.create_table(
-        'documents',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('content', sa.Text(), nullable=False),
-        sa.Column('embedding', Vector(dim=768), nullable=True),
-        sa.PrimaryKeyConstraint('id')
-    )
+    conn = op.get_bind()
+    inspector = Inspector.from_engine(conn)
+    tables = inspector.get_table_names()
+    if 'documents' not in tables:
+        op.create_table(
+            'documents',
+            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('content', sa.Text(), nullable=False),
+            sa.Column('embedding', Vector(dim=768), nullable=True),
+            sa.PrimaryKeyConstraint('id')
+        )
 
 
 def downgrade() -> None:

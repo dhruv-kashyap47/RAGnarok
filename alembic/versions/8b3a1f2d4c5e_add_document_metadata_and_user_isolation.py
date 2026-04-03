@@ -18,24 +18,36 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def upgrade() -> None:
-    op.create_table(
-        'document_files',
-        sa.Column('id', sa.UUID(), nullable=False),
-        sa.Column('user_id', sa.UUID(), nullable=False),
-        sa.Column('filename', sa.Text(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id']),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_document_files_user_id'), 'document_files', ['user_id'], unique=False)
+from sqlalchemy.engine.reflection import Inspector
 
-    op.add_column('documents', sa.Column('user_id', sa.UUID(), nullable=True))
-    op.add_column('documents', sa.Column('document_id', sa.UUID(), nullable=True))
-    op.create_foreign_key('fk_documents_user_id_users', 'documents', 'users', ['user_id'], ['id'])
-    op.create_foreign_key('fk_documents_document_id_document_files', 'documents', 'document_files', ['document_id'], ['id'])
-    op.create_index(op.f('ix_documents_user_id'), 'documents', ['user_id'], unique=False)
-    op.create_index(op.f('ix_documents_document_id'), 'documents', ['document_id'], unique=False)
+def upgrade() -> None:
+    conn = op.get_bind()
+    inspector = Inspector.from_engine(conn)
+    tables = inspector.get_table_names()
+
+    if 'document_files' not in tables:
+        op.create_table(
+            'document_files',
+            sa.Column('id', sa.UUID(), nullable=False),
+            sa.Column('user_id', sa.UUID(), nullable=False),
+            sa.Column('filename', sa.Text(), nullable=False),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+            sa.ForeignKeyConstraint(['user_id'], ['users.id']),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_document_files_user_id'), 'document_files', ['user_id'], unique=False)
+
+    columns = [c['name'] for c in inspector.get_columns('documents')] if 'documents' in tables else []
+    
+    if 'user_id' not in columns:
+        op.add_column('documents', sa.Column('user_id', sa.UUID(), nullable=True))
+        op.create_foreign_key('fk_documents_user_id_users', 'documents', 'users', ['user_id'], ['id'])
+        op.create_index(op.f('ix_documents_user_id'), 'documents', ['user_id'], unique=False)
+        
+    if 'document_id' not in columns:
+        op.add_column('documents', sa.Column('document_id', sa.UUID(), nullable=True))
+        op.create_foreign_key('fk_documents_document_id_document_files', 'documents', 'document_files', ['document_id'], ['id'])
+        op.create_index(op.f('ix_documents_document_id'), 'documents', ['document_id'], unique=False)
 
 
 def downgrade() -> None:

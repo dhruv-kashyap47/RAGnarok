@@ -67,16 +67,20 @@
         background: var(--raised);
       }
       @media (max-width: 900px) {
-        .hamburger { display: block; }
+        .hamburger {
+          display: block;
+        }
       }
       .sidebar-overlay {
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,0.5);
+        background: rgba(0, 0, 0, 0.5);
         z-index: 49;
       }
-      .sidebar-overlay.show { display: block; }
+      .sidebar-overlay.show {
+        display: block;
+      }
 
       button,
       input,
@@ -1266,7 +1270,7 @@
         font-size: 0.82em;
       }
       .msg.assistant pre {
-        background: rgba(0,0,0,0.3);
+        background: rgba(0, 0, 0, 0.3);
         border: 1px solid var(--line);
         border-radius: 2px;
         padding: 12px;
@@ -1277,12 +1281,17 @@
         background: none;
         padding: 0;
       }
-      .msg.assistant ul, .msg.assistant ol {
+      .msg.assistant ul,
+      .msg.assistant ol {
         padding-left: 20px;
         margin: 6px 0;
       }
-      .msg.assistant strong { color: var(--cyan2); }
-      .msg.assistant em { color: var(--muted2); }
+      .msg.assistant strong {
+        color: var(--cyan2);
+      }
+      .msg.assistant em {
+        color: var(--muted2);
+      }
 
       @media (max-width: 900px) {
         .auth-shell {
@@ -1439,8 +1448,14 @@
 
     <!-- WORKSPACE -->
     <div class="workspace hidden" id="workspace">
-      <button class="hamburger" id="hamburger" onclick="toggleSidebar()">☰</button>
-      <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+      <button class="hamburger" id="hamburger" onclick="toggleSidebar()">
+        ☰
+      </button>
+      <div
+        class="sidebar-overlay"
+        id="sidebar-overlay"
+        onclick="toggleSidebar()"
+      ></div>
       <!-- SIDEBAR -->
       <aside class="sidebar" id="sidebar">
         <div class="sb-logo">
@@ -1638,7 +1653,9 @@
         );
 
       function conversationStorageKey() {
-        return state.profile?.id ? `rag_conversations_${state.profile.id}` : null;
+        return state.profile?.id
+          ? `rag_conversations_${state.profile.id}`
+          : null;
       }
 
       function normalizeMessageText(value) {
@@ -1652,7 +1669,8 @@
           activeId: state.activeId,
           conversations: state.conversations.map((conversation) => ({
             id: conversation.id,
-            title: normalizeMessageText(conversation.title) || "New conversation",
+            title:
+              normalizeMessageText(conversation.title) || "New conversation",
             messages: (conversation.messages || [])
               .filter((message) => !message.thinking)
               .map((message) => ({
@@ -1684,7 +1702,8 @@
                 .map((conversation) => ({
                   id: String(conversation?.id || Date.now()),
                   title:
-                    normalizeMessageText(conversation?.title) || "New conversation",
+                    normalizeMessageText(conversation?.title) ||
+                    "New conversation",
                   messages: Array.isArray(conversation?.messages)
                     ? conversation.messages
                         .map((message) => ({
@@ -1734,7 +1753,10 @@
       function conversationPreview(convo) {
         const lastStableMessage = [...(convo?.messages || [])]
           .reverse()
-          .find((message) => !message.thinking && normalizeMessageText(message.content));
+          .find(
+            (message) =>
+              !message.thinking && normalizeMessageText(message.content),
+          );
         if (!lastStableMessage) return "Empty conversation";
 
         const prefix = lastStableMessage.error ? "Issue: " : "";
@@ -1749,7 +1771,8 @@
         if (message.error) {
           flags.push(
             `<div class="msg-flag err">${esc(
-              normalizeMessageText(message.warning) || "Assistant request failed",
+              normalizeMessageText(message.warning) ||
+                "Assistant request failed",
             )}</div>`,
           );
         } else if (message.retrievalStatus === "used") {
@@ -1765,31 +1788,44 @@
           message.warning &&
           message.retrievalStatus !== "failed"
         ) {
-          flags.push(`<div class="msg-flag warn">${esc(message.warning)}</div>`);
+          flags.push(
+            `<div class="msg-flag warn">${esc(message.warning)}</div>`,
+          );
         }
 
-        return flags.length ? `<div class="msg-flags">${flags.join("")}</div>` : "";
+        return flags.length
+          ? `<div class="msg-flags">${flags.join("")}</div>`
+          : "";
       }
 
       function renderMarkdown(text) {
         let s = esc(text);
-        s = s.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-        s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-        s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        s = s.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
-        s = s.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-        s = s.replace(/^### (.+)$/gm, '<strong style="font-size:0.95em">$1</strong>');
-        s = s.replace(/^## (.+)$/gm, '<strong style="font-size:1em">$1</strong>');
-        s = s.replace(/^# (.+)$/gm, '<strong style="font-size:1.05em">$1</strong>');
+        s = s.replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>");
+        s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+        s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+        s = s.replace(/\*(.+?)\*/g, "<em>$1</em>");
+        s = s.replace(/^[-*] (.+)$/gm, "<li>$1</li>");
+        s = s.replace(/(<li>.*<\/li>)/s, "<ul>$1</ul>");
+        s = s.replace(
+          /^### (.+)$/gm,
+          '<strong style="font-size:0.95em">$1</strong>',
+        );
+        s = s.replace(
+          /^## (.+)$/gm,
+          '<strong style="font-size:1em">$1</strong>',
+        );
+        s = s.replace(
+          /^# (.+)$/gm,
+          '<strong style="font-size:1.05em">$1</strong>',
+        );
         return s;
       }
 
       function toggleSidebar() {
-        const sb = q('sidebar');
-        const ov = q('sidebar-overlay');
-        sb.classList.toggle('open');
-        ov.classList.toggle('show');
+        const sb = q("sidebar");
+        const ov = q("sidebar-overlay");
+        sb.classList.toggle("open");
+        ov.classList.toggle("show");
       }
 
       function showAlert(id, msg, type) {
@@ -1936,7 +1972,10 @@
         q("workspace").classList.remove("hidden");
 
         try {
-          const [profile] = await Promise.all([apiFetch("/me"), loadCapabilities()]);
+          const [profile] = await Promise.all([
+            apiFetch("/me"),
+            loadCapabilities(),
+          ]);
           state.profile = profile;
           loadPersistedConversations();
           q("user-avatar").textContent = (state.profile.email || "U")
@@ -1944,9 +1983,7 @@
             .toUpperCase();
           q("user-email").textContent = state.profile.email;
           q("user-role").textContent =
-            state.profile.role ||
-            state.capabilities?.llm_provider ||
-            "user";
+            state.profile.role || state.capabilities?.llm_provider || "user";
           if (!state.conversations.length) newConversation();
           await refreshWorkspace();
         } catch (err) {
@@ -1959,7 +1996,11 @@
       }
 
       async function refreshWorkspace() {
-        await Promise.allSettled([checkHealth(), loadCapabilities(), loadDocuments()]);
+        await Promise.allSettled([
+          checkHealth(),
+          loadCapabilities(),
+          loadDocuments(),
+        ]);
         renderConvList();
         renderMessages();
       }
@@ -1972,7 +2013,8 @@
           return data;
         } catch {
           if (state.capabilities) {
-            q("stat-embed").textContent = state.capabilities.embedding_dimensions || "—";
+            q("stat-embed").textContent =
+              state.capabilities.embedding_dimensions || "—";
           }
           return state.capabilities;
         }
@@ -2124,7 +2166,9 @@
       <div>
         <div class="doc-item-name" style="font-size: 0.8rem; font-weight: 600;">${esc(doc.filename || "Untitled document")}</div>
         <div class="doc-item-meta" style="font-size: 0.7rem; color: var(--muted);">${esc(
-          doc.created_at ? new Date(doc.created_at).toLocaleString() : "Indexed",
+          doc.created_at
+            ? new Date(doc.created_at).toLocaleString()
+            : "Indexed",
         )}</div>
       </div>
       <button class="btn-ghost" style="padding: 4px; width: 28px; border: none; color: var(--red); cursor: pointer;" onclick="deleteDocument('${doc.id}')" title="Delete Upload">
@@ -2203,7 +2247,7 @@
     <div class="msg-wrap">
       <div class="msg-meta">${m.role === "user" ? "// you" : "// assistant"}</div>
       <div class="msg ${m.role}${m.thinking ? " thinking" : ""}${m.typing ? " typing" : ""}">
-        ${m.thinking ? thinkingMarkup() : (m.role === 'assistant' ? renderMarkdown(m.content) : esc(m.content))}
+        ${m.thinking ? thinkingMarkup() : m.role === "assistant" ? renderMarkdown(m.content) : esc(m.content)}
         ${messageFlags(m)}
         ${
           !m.thinking && m.role === "assistant" && m.sources?.length
@@ -2224,12 +2268,25 @@
       }
 
       async function animateAssistantMessage(message, fullText) {
-        const normalized = String(fullText || "").trim() || "No answer returned.";
+        const normalized =
+          String(fullText || "").trim() || "No answer returned.";
         const totalLength = normalized.length;
         const chunkSize =
-          totalLength > 1200 ? 18 : totalLength > 600 ? 12 : totalLength > 240 ? 6 : 3;
+          totalLength > 1200
+            ? 18
+            : totalLength > 600
+              ? 12
+              : totalLength > 240
+                ? 6
+                : 3;
         const frameDelay =
-          totalLength > 1200 ? 10 : totalLength > 600 ? 14 : totalLength > 240 ? 18 : 24;
+          totalLength > 1200
+            ? 10
+            : totalLength > 600
+              ? 14
+              : totalLength > 240
+                ? 18
+                : 24;
 
         message.thinking = false;
         message.typing = true;
@@ -2263,7 +2320,11 @@
         clearAlert("chat-alert");
         if (state.sending) return;
         if (!state.token) {
-          showAlert("chat-alert", "Sign in to continue the conversation.", "error");
+          showAlert(
+            "chat-alert",
+            "Sign in to continue the conversation.",
+            "error",
+          );
           return;
         }
         const text = q("question-input").value.trim();
@@ -2312,7 +2373,9 @@
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(state.token ? { "Authorization": `Bearer ${state.token}` } : {})
+              ...(state.token
+                ? { Authorization: `Bearer ${state.token}` }
+                : {}),
             },
             body: JSON.stringify({
               question: text,
@@ -2322,7 +2385,10 @@
 
           if (!res.ok) {
             let msg = "Request failed";
-            try { const errData = await res.json(); msg = errData.message || errData.detail || msg; } catch(e){}
+            try {
+              const errData = await res.json();
+              msg = errData.message || errData.detail || msg;
+            } catch (e) {}
             throw new Error(msg);
           }
 
@@ -2341,30 +2407,32 @@
             buffer = lines.pop(); // keep remainder for next cycle
 
             for (let line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const data = JSON.parse(line);
-                    if (data.type === "metadata") {
-                        thinkMsg.sources = data.sources || [];
-                        thinkMsg.usedContext = Boolean(data.used_context);
-                        thinkMsg.retrievalStatus = data.retrieval_status || (thinkMsg.usedContext ? "used" : "empty");
-                        thinkMsg.warning = normalizeMessageText(data.warning);
-                        renderMessages();
-                    } else if (data.type === "chunk") {
-                        thinkMsg.content += data.content;
-                        renderMessages();
-                    }
-                } catch(e) {
-                   console.error("Stream parse error", e, line);
+              if (!line.trim()) continue;
+              try {
+                const data = JSON.parse(line);
+                if (data.type === "metadata") {
+                  thinkMsg.sources = data.sources || [];
+                  thinkMsg.usedContext = Boolean(data.used_context);
+                  thinkMsg.retrievalStatus =
+                    data.retrieval_status ||
+                    (thinkMsg.usedContext ? "used" : "empty");
+                  thinkMsg.warning = normalizeMessageText(data.warning);
+                  renderMessages();
+                } else if (data.type === "chunk") {
+                  thinkMsg.content += data.content;
+                  renderMessages();
                 }
+              } catch (e) {
+                console.error("Stream parse error", e, line);
+              }
             }
           }
 
           if (buffer.trim()) {
             try {
-                const data = JSON.parse(buffer);
-                if (data.type === "chunk") thinkMsg.content += data.content;
-            } catch(e){}
+              const data = JSON.parse(buffer);
+              if (data.type === "chunk") thinkMsg.content += data.content;
+            } catch (e) {}
           }
 
           persistConversations();
