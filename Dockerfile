@@ -6,11 +6,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
-# ---- System Dependencies (important for psycopg, pdf, etc.) ----
-RUN apt-get update && apt-get install -y \
+# ---- System Dependencies ----
+# libmupdf-dev / mupdf-tools are needed by PyMuPDF (pymupdf4llm dependency).
+# libgl1 / libglib2.0-0 prevent headless rendering errors on slim images.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     curl \
+    libgl1 \
+    libglib2.0-0 \
+    libmupdf-dev \
+    mupdf-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # ---- Workdir ----
@@ -27,5 +33,5 @@ RUN chmod +x /app/start.sh
 # ---- Expose Port ----
 EXPOSE 10000
 
-# ---- Start Command (Render-friendly + DB-safe) ----
+# ---- Start Command ----
 CMD ["/app/start.sh"]

@@ -133,47 +133,122 @@ async def ask_with_history(
     )
 
 
+_MAX_PDF_BYTES = 20 * 1024 * 1024  # 20 MB hard limit
+
+
 @router.post("/upload-pdf")
 async def upload_pdf(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
     db=Depends(get_db),
 ):
-    filename = file.filename or "document.pdf"
-    if not filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    from app.core.logger import logger
 
-    suffix = os.path.splitext(filename)[1] or ".pdf"
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    file_path = temp_file.name
-    chunks = []
+    filename = (file.filename or "document.pdf").strip()
+
+    # --- Validate filename extension ---
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+
+    # --- Validate MIME type if provided ---
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in ("application/pdf", "application/octet-stream", ""):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid content type '{content_type}'. Expected application/pdf.",
+        )
+
+    # Safe default; will be set before the finally block is reached
+    file_path: str | None = None
+    document_record = None
+    chunks: list[str] = []
 
     try:
-        temp_file.write(await file.read())
-        temp_file.close()
+        # --- Read & size-check in memory before writing to disk ---
+        raw_bytes = await file.read()
+        if len(raw_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+        if len(raw_bytes) > _MAX_PDF_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"PDF exceeds the {_MAX_PDF_BYTES // (1024 * 1024)} MB size limit.",
+            )
 
+        # --- Write to temp file ---
+        suffix = os.path.splitext(filename)[1] or ".pdf"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        file_path = tmp.name
+        try:
+            tmp.write(raw_bytes)
+        finally:
+            tmp.close()
+
+        del raw_bytes  # free memory before embedding
+
+        # --- Extract text ---
+        logger.info(
+            "upload-pdf: extracting text from '%s' (user_id=%s)",
+            filename,
+            current_user["user_id"],
+        )
         text = extract_text_from_pdf(file_path).strip()
         if not text:
-            raise HTTPException(status_code=400, detail="No extractable text found in this PDF")
+            raise HTTPException(
+                status_code=400,
+                detail="No extractable text found in this PDF. It may be a scanned image.",
+            )
 
-        chunks = [chunk for chunk in chunk_text(text) if chunk.strip()]
+        # --- Chunk ---
+        chunks = [c for c in chunk_text(text) if c.strip()]
         if not chunks:
-            raise HTTPException(status_code=400, detail="Unable to create chunks from this PDF")
+            raise HTTPException(status_code=400, detail="Unable to create chunks from this PDF.")
 
+        logger.info(
+            "upload-pdf: produced %d chunks for '%s' (user_id=%s)",
+            len(chunks),
+            filename,
+            current_user["user_id"],
+        )
+
+        # --- Embed ---
         embeddings = await get_embeddings(chunks)
 
+        # --- Persist ---
         document_record = await create_document_record(db, current_user["user_id"], filename)
-        await store_documents_bulk(db, current_user["user_id"], document_record.id, list(zip(chunks, embeddings)))
+        await store_documents_bulk(
+            db,
+            current_user["user_id"],
+            document_record.id,
+            list(zip(chunks, embeddings)),
+        )
         await db.commit()
+
+        logger.info(
+            "upload-pdf: committed document_id=%s '%s' (%d chunks) for user_id=%s",
+            document_record.id,
+            filename,
+            len(chunks),
+            current_user["user_id"],
+        )
 
     except HTTPException:
         await db.rollback()
         raise
-    except Exception:
+    except Exception as exc:
         await db.rollback()
-        raise
+        logger.error(
+            "upload-pdf: unexpected error for '%s' (user_id=%s): %s",
+            filename,
+            current_user["user_id"],
+            exc,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while processing the PDF.",
+        ) from exc
     finally:
-        if os.path.exists(file_path):
+        if file_path and os.path.exists(file_path):
             os.remove(file_path)
 
     return {
