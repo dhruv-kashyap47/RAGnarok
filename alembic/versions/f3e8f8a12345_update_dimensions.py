@@ -19,7 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Use raw SQL to alter the vector column dimension
+    # Existing rows have 768-dim vectors that cannot be cast to 3072-dim.
+    # Clear them first, then change the column type.
+    op.execute("DELETE FROM documents;")
     op.execute("ALTER TABLE documents ALTER COLUMN embedding TYPE vector(3072);")
 
 
