@@ -61,7 +61,6 @@ async def get_embeddings(
                         "model": f"models/{GEMINI_EMBED_MODEL}",
                         "content": {"parts": [{"text": text}]},
                         "taskType": task_type,
-                        "outputDimensionality": EMBEDDING_DIMENSIONS,
                     }
                     for text in cleaned
                 ]
