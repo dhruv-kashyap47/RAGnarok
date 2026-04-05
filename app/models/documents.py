@@ -23,4 +23,4 @@ class Document(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     document_id = Column(UUID(as_uuid=True), ForeignKey("document_files.id"), nullable=True, index=True)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(768))
+    embedding = Column(Vector(3072))

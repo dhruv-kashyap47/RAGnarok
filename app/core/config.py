@@ -52,7 +52,7 @@ GEMINI_EMBED_MODEL = get_env("GEMINI_EMBED_MODEL", "gemini-embedding-001")
 GROQ_API_KEY = get_env("GROQ_API_KEY")
 GROQ_API_BASE = get_env("GROQ_API_BASE", "https://api.groq.com/openai/v1")
 GROQ_CHAT_MODEL = get_env("GROQ_CHAT_MODEL", "llama-3.1-8b-instant")
-EMBEDDING_DIMENSIONS = int(get_env("EMBEDDING_DIMENSIONS", "768"))
+EMBEDDING_DIMENSIONS = int(get_env("EMBEDDING_DIMENSIONS", "3072"))
 
 HTTP_TIMEOUT_SECONDS = float(get_env("HTTP_TIMEOUT_SECONDS", "60"))
 CHAT_TIMEOUT_SECONDS = float(get_env("CHAT_TIMEOUT_SECONDS", "120"))
