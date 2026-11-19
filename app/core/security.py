@@ -1,11 +1,16 @@
+import hmac
+from datetime import UTC, datetime, timedelta
+
+from jose import JWTError, jwt
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
-from jose import jwt, JWTError
-from datetime import datetime, timedelta, timezone
 
-from app.core.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, ALGORITHM, SECRET_KEY
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# NOTE: passlib guards lazy backend initialization with its own
+# `_backend_lock`, so first-use hashing from worker threads is safe.
 
 
 def hash_password(password: str) -> str:
@@ -16,7 +21,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return pwd_context.verify(plain_password, hashed_password)
     except UnknownHashError:
-        return plain_password == hashed_password
+        # Legacy rows may store a non-bcrypt value. Compare in constant time
+        # so login timing does not reveal whether an account exists.
+        return hmac.compare_digest(plain_password.encode(), hashed_password.encode())
 
 
 def password_needs_rehash(stored_password: str) -> bool:
@@ -28,14 +35,22 @@ def password_needs_rehash(stored_password: str) -> bool:
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def verify_access_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Require exp so a token without an expiry is never accepted.
+        # NOTE: python-jose uses the boolean `require_exp` option (not
+        # PyJWT's `require: [...]` list, which jose silently ignores).
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"require_exp": True},
+        )
         user_id = payload.get("user_id")
         if user_id is None:
             return None

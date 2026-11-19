@@ -1,10 +1,10 @@
 import uuid
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, DateTime, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.database import Base
-from pgvector.sqlalchemy import Vector
 
 
 class DocumentFile(Base):

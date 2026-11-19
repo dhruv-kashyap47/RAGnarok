@@ -1,10 +1,10 @@
-from app.db.database import Base
-from app.db.database import engine
+import asyncio
+
+from app.db.database import Base, engine
 
 # 🔥 IMPORT ALL MODELS (THIS IS THE KEY FIX)
-from app.models import user, documents
+from app.models import documents, user  # noqa: F401  (registers ORM metadata)
 
-import asyncio
 
 async def init():
     async with engine.begin() as conn:

@@ -10,3 +10,14 @@ __pycache__/
 .idea/
 *.log
 tmp_test_doc.pdf
+
+# Test/lint tooling — not needed in the runtime image
+tests/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+pytest.ini
+ruff.toml
+requirements-dev.txt

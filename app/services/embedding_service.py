@@ -2,10 +2,12 @@
 embedding_service.py — Gemini batch embedding client.
 
 Sends text chunks to the Gemini batchEmbedContents API and returns
-768-dimensional float vectors ready for pgvector storage.
+EMBEDDING_DIMENSIONS-dimensional float vectors ready for pgvector storage.
 """
 
 from __future__ import annotations
+
+import math
 
 import httpx
 from fastapi import HTTPException
@@ -19,11 +21,28 @@ from app.core.config import (
 )
 from app.core.logger import logger
 
-# Shared async client — API key is injected per-request so it is always fresh
-_client = httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS)
+# Shared async client — API key is injected per-request so it is always fresh.
+# Created lazily so it is bound to the running event loop and can be replaced
+# after shutdown (e.g. across test lifespans).
+_client: httpx.AsyncClient | None = None
 
-# Gemini embedding-001 hard limit per request (in texts, not tokens)
+# Gemini embedding model hard limit per request (in texts, not tokens)
 _MAX_BATCH_SIZE = 100
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS)
+    return _client
+
+
+async def close_http_client() -> None:
+    """Close the shared HTTP client on application shutdown."""
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
 
 
 def get_embedding_provider() -> str:
@@ -53,7 +72,20 @@ def _validate_embedding(values: list[float]) -> list[float]:
                 f"Ensure EMBEDDING_DIMENSIONS matches the model."
             ),
         )
-    return values
+    for value in values:
+        # Reject booleans, strings, NaN/inf: anything unexpected would poison
+        # the vector column or break the similarity-search literal.
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise HTTPException(
+                status_code=502,
+                detail="Gemini returned non-numeric embedding values.",
+            )
+        if not math.isfinite(value):
+            raise HTTPException(
+                status_code=502,
+                detail="Gemini returned non-finite embedding values.",
+            )
+    return [float(v) for v in values]
 
 
 async def _batch_embed(texts: list[str], task_type: str) -> list[list[float]]:
@@ -63,7 +95,7 @@ async def _batch_embed(texts: list[str], task_type: str) -> list[list[float]]:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY is not configured")
 
     try:
-        response = await _client.post(
+        response = await _get_client().post(
             f"{GEMINI_API_BASE}/{GEMINI_EMBED_MODEL}:batchEmbedContents",
             headers={"x-goog-api-key": api_key},
             json={
@@ -81,7 +113,7 @@ async def _batch_embed(texts: list[str], task_type: str) -> list[list[float]]:
         logger.error("Gemini embedding transport error: %s", exc)
         raise HTTPException(
             status_code=502,
-            detail=f"Gemini embeddings request failed: {exc}",
+            detail="Gemini embeddings request failed. Please try again later.",
         ) from exc
 
     if response.status_code >= 400:
@@ -118,7 +150,7 @@ async def get_embeddings(
 ) -> list[list[float]]:
     """
     Embed a list of texts, automatically batching to respect API limits.
-    Returns one embedding vector per text (filtered empties removed).
+    Returns one embedding vector per input text.
     """
     cleaned = [t.strip() for t in texts if t and t.strip()]
     if not cleaned:

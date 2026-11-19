@@ -1,11 +1,11 @@
 import json
+
 from fastapi import HTTPException
 
 from app.core.config import MAX_CHAT_HISTORY_MESSAGES
 from app.core.logger import logger
-from app.schemas.chat import ChatResponse, ChatSource
 from app.services.embedding_service import get_embedding
-from app.services.llm_service import generate_answer, stream_generate_answer
+from app.services.llm_service import stream_generate_answer
 from app.services.vector_store import similarity_search
 
 
@@ -105,13 +105,21 @@ async def ask_question_stream(
         embedding = await get_embedding(question, task_type="RETRIEVAL_QUERY")
         results = await similarity_search(db, embedding, user_id=user_id, k=k)
         retrieval_status = "used" if results else "empty"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — retrieval must never break answering
         logger.warning("Retrieval failed for user_id=%s: %s", user_id, exc)
         warning = (
             "Document retrieval was unavailable, so this answer may rely on model "
             "knowledge instead of your indexed files."
         )
         retrieval_status = "failed"
+    finally:
+        # The LLM stream below can take minutes. Release the pooled DB
+        # connection now instead of holding it for the whole stream, otherwise
+        # concurrent questions exhaust the connection pool.
+        try:
+            await db.rollback()
+        except Exception as exc:  # noqa: BLE001 — defensive, never mask the answer
+            logger.warning("Failed to release db connection: %s", exc)
 
     # initial payload
     initial_metadata = {
@@ -126,6 +134,6 @@ async def ask_question_stream(
     try:
         async for chunk in stream_generate_answer(_build_prompt(question, history, results)):
             yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — convert to an in-stream error event
         logger.error("Generation failed for user_id=%s: %s", user_id, exc)
         yield json.dumps({"type": "chunk", "content": "\n[Error: Stream generation failed]"}) + "\n"

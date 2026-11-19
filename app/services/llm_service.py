@@ -1,4 +1,5 @@
 import json
+
 import httpx
 from fastapi import HTTPException
 
@@ -13,7 +14,24 @@ from app.core.config import (
 )
 from app.core.logger import logger
 
-_client = httpx.AsyncClient(timeout=CHAT_TIMEOUT_SECONDS)
+# Created lazily so it binds to the running event loop and can be cycled on
+# shutdown (e.g. across test lifespans).
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=CHAT_TIMEOUT_SECONDS)
+    return _client
+
+
+async def close_http_client() -> None:
+    """Close the shared HTTP client on application shutdown."""
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+    _client = None
 
 
 def get_llm_provider() -> str:
@@ -69,7 +87,7 @@ async def _generate_with_groq(prompt: str) -> str:
 
     logger.info("Sending prompt to Groq model=%s", GROQ_CHAT_MODEL)
     try:
-        response = await _client.post(
+        response = await _get_client().post(
             f"{GROQ_API_BASE}/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
             json={
@@ -83,7 +101,7 @@ async def _generate_with_groq(prompt: str) -> str:
         logger.error("Groq transport error: %s", exc)
         raise HTTPException(
             status_code=502,
-            detail=f"Groq generation request failed: {exc}",
+            detail="Groq generation request failed. Please try again later.",
         ) from exc
 
     if response.status_code >= 400:
@@ -105,7 +123,7 @@ async def _generate_with_gemini(prompt: str) -> str:
 
     logger.info("Sending prompt to Gemini model=%s", GEMINI_CHAT_MODEL)
     try:
-        response = await _client.post(
+        response = await _get_client().post(
             f"{GEMINI_API_BASE}/{GEMINI_CHAT_MODEL}:generateContent",
             headers={"x-goog-api-key": GEMINI_API_KEY},
             json={
@@ -120,7 +138,7 @@ async def _generate_with_gemini(prompt: str) -> str:
         logger.error("Gemini transport error: %s", exc)
         raise HTTPException(
             status_code=502,
-            detail=f"Gemini generation request failed: {exc}",
+            detail="Gemini generation request failed. Please try again later.",
         ) from exc
 
     if response.status_code >= 400:
@@ -157,7 +175,7 @@ async def _stream_with_groq(prompt: str):
 
     logger.info("Streaming prompt to Groq model=%s", GROQ_CHAT_MODEL)
     try:
-        async with _client.stream(
+        async with _get_client().stream(
             "POST",
             f"{GROQ_API_BASE}/chat/completions",
             headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
@@ -187,13 +205,15 @@ async def _stream_with_groq(prompt: str):
                         text_chunk = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
                         if text_chunk:
                             yield text_chunk
-                    except Exception:
-                        pass
+                    except (json.JSONDecodeError, IndexError, TypeError, AttributeError, KeyError):
+                        # Malformed SSE frame (keepalive, truncated JSON):
+                        # skip it and keep streaming.
+                        logger.debug("Skipping malformed Groq stream frame")
     except httpx.HTTPError as exc:
         logger.error("Groq stream transport error: %s", exc)
         raise HTTPException(
             status_code=502,
-            detail=f"Groq generation request failed: {exc}",
+            detail="Groq generation request failed. Please try again later.",
         ) from exc
 
 
@@ -203,7 +223,7 @@ async def _stream_with_gemini(prompt: str):
 
     logger.info("Streaming prompt to Gemini model=%s", GEMINI_CHAT_MODEL)
     try:
-        async with _client.stream(
+        async with _get_client().stream(
             "POST",
             f"{GEMINI_API_BASE}/{GEMINI_CHAT_MODEL}:streamGenerateContent?alt=sse",
             headers={"x-goog-api-key": GEMINI_API_KEY},
@@ -241,7 +261,7 @@ async def _stream_with_gemini(prompt: str):
         logger.error("Gemini stream transport error: %s", exc)
         raise HTTPException(
             status_code=502,
-            detail=f"Gemini generation request failed: {exc}",
+            detail="Gemini generation request failed. Please try again later.",
         ) from exc
 
 
@@ -252,12 +272,16 @@ async def stream_generate_answer(prompt: str):
 
     provider = _require_configured_provider()
     if provider == "groq":
+        yielded_any = False
         try:
             async for chunk in _stream_with_groq(prompt):
+                yielded_any = True
                 yield chunk
             return
         except HTTPException as exc:
-            if _has_gemini_fallback():
+            # Only fall back when nothing has been sent yet. Replaying from a
+            # second provider after a partial stream would duplicate output.
+            if not yielded_any and _has_gemini_fallback():
                 logger.warning("Groq stream failed; falling back to Gemini: %s", exc.detail)
                 async for chunk in _stream_with_gemini(prompt):
                     yield chunk

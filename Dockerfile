@@ -30,8 +30,19 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY . .
 RUN chmod +x /app/start.sh
 
+# ---- Run as non-root ----
+# The app only reads /app (bytecode writes are disabled) and writes to /tmp
+# and stdout, so a locked-down user is safe and limits container escapes.
+RUN useradd --create-home --shell /usr/sbin/nologin appuser
+USER appuser
+
 # ---- Expose Port ----
 EXPOSE 10000
+
+# ---- Healthcheck ----
+# ${PORT} is expanded at runtime by the shell form; start.sh defaults to 10000.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-10000}/health" || exit 1
 
 # ---- Start Command ----
 CMD ["/app/start.sh"]

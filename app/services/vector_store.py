@@ -8,11 +8,15 @@ import time
 from typing import TypedDict
 from uuid import UUID
 
-from sqlalchemy import select, text, delete
+from sqlalchemy import delete, insert, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import logger
 from app.models.documents import Document, DocumentFile
+
+# Keep each INSERT well under PostgreSQL's 65535 bind-parameter limit
+# (5 columns per row here) and bound per-round-trip payload size.
+_INSERT_BATCH_SIZE = 500
 
 
 class DocumentFileSummary(TypedDict):
@@ -43,48 +47,45 @@ async def create_document_record(
     return doc_file
 
 
-async def store_document(
-    db: AsyncSession,
-    user_id: str | UUID,
-    document_id: str | UUID,
-    content: str,
-    embedding: list[float],
-) -> Document:
-    """Insert a single Document chunk."""
-    doc = Document(
-        user_id=user_id,
-        document_id=document_id,
-        content=content,
-        embedding=embedding,
-    )
-    db.add(doc)
-    await db.flush()
-    return doc
-
-
 async def store_documents_bulk(
     db: AsyncSession,
     user_id: str | UUID,
     document_id: str | UUID,
     chunks: list[tuple[str, list[float]]],
 ) -> int:
-    """Insert multiple (content, embedding) chunks in a single round-trip."""
+    """
+    Insert (content, embedding) chunks in batches of _INSERT_BATCH_SIZE.
+
+    Uses Core inserts (no ORM identity-map retention) so memory stays bounded
+    for large documents and no single statement can exceed PostgreSQL's
+    bind-parameter limit.
+    """
     if not chunks:
         return 0
 
-    rows = [
-        Document(
-            user_id=user_id,
-            document_id=document_id,
-            content=content,
-            embedding=embedding,
-        )
-        for content, embedding in chunks
-    ]
-    db.add_all(rows)
-    await db.flush()
-    logger.debug("Bulk-inserted %d chunks for document_id=%s", len(rows), document_id)
-    return len(rows)
+    stmt = insert(Document)
+    inserted = 0
+    for start in range(0, len(chunks), _INSERT_BATCH_SIZE):
+        batch = chunks[start : start + _INSERT_BATCH_SIZE]
+        rows = [
+            {
+                "user_id": user_id,
+                "document_id": document_id,
+                "content": content,
+                "embedding": embedding,
+            }
+            for content, embedding in batch
+        ]
+        await db.execute(stmt, rows)
+        inserted += len(rows)
+
+    logger.debug(
+        "Bulk-inserted %d chunks for document_id=%s in %d batch(es)",
+        inserted,
+        document_id,
+        (len(chunks) + _INSERT_BATCH_SIZE - 1) // _INSERT_BATCH_SIZE,
+    )
+    return inserted
 
 
 async def list_documents(
@@ -112,20 +113,32 @@ async def delete_document(
     user_id: str | UUID,
     document_id: str | UUID,
 ) -> bool:
-    """Delete a DocumentFile and all its Document chunks for a given user."""
-    # Delete chunks first
+    """
+    Delete a DocumentFile and all its Document chunks for a given user.
+
+    Ownership is verified first so we never delete chunks on behalf of another
+    tenant, and the caller only commits when this returns True.
+    """
+    header = await db.execute(
+        select(DocumentFile.id)
+        .where(DocumentFile.id == document_id)
+        .where(DocumentFile.user_id == user_id)
+    )
+    if header.first() is None:
+        return False
+
+    # Chunks first: documents.document_id has a FK to document_files.id.
     await db.execute(
         delete(Document)
         .where(Document.document_id == document_id)
         .where(Document.user_id == user_id)
     )
-    # Delete file record
-    result = await db.execute(
+    await db.execute(
         delete(DocumentFile)
         .where(DocumentFile.id == document_id)
         .where(DocumentFile.user_id == user_id)
     )
-    return result.rowcount > 0
+    return True
 
 
 async def similarity_search(
@@ -138,6 +151,8 @@ async def similarity_search(
     """Return the k most relevant chunks using pgvector cosine distance."""
     t0 = time.monotonic()
 
+    # Parameterized value, never interpolated SQL. Components are guaranteed
+    # finite floats by embedding_service._validate_embedding.
     embedding_literal = f"[{','.join(map(str, query_embedding))}]"
 
     sql = text("""
