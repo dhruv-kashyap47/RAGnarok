@@ -53,8 +53,10 @@ in later and your guest documents are merged into your account automatically.
 
 * **Backend:** FastAPI, SQLAlchemy, HTTPX
 * **Database:** PostgreSQL + pgvector (HNSW index)
-* **LLM + embeddings:** Groq only — `llama-3.1-8b-instant` for chat,
-  `nomic-embed-text-v1_5` (768-dim vectors) for embeddings
+* **LLM:** Groq `llama-3.1-8b-instant` (free developer tier)
+* **Embeddings:** Gemini `gemini-embedding-001` (requested at 768 dims).
+  Groq is chat-only: its `nomic-embed-text-v1_5` embedding model 404s for
+  normal API keys, so it cannot back a working RAG pipeline.
 * **Frontend:** Vanilla JS + HTML + modern CSS (fast, clean, no bloat)
 
 ---
@@ -66,6 +68,7 @@ in later and your guest documents are merged into your account automatically.
 * Docker + Docker Compose
 * Python 3.10+
 * Groq API Key (free developer tier)
+* Gemini API Key (free tier, for embeddings)
 
 ---
 
@@ -77,15 +80,17 @@ Create `.env`:
 SECRET_KEY=use-a-strong-random-64-char-string
 GROQ_API_KEY=your_key_here
 GROQ_CHAT_MODEL=llama-3.1-8b-instant
-GROQ_EMBED_MODEL=nomic-embed-text-v1_5
+GEMINI_API_KEY=your_key_here
+GEMINI_EMBED_MODEL=gemini-embedding-001
 EMBEDDING_DIMENSIONS=768
 DATABASE_URL=postgresql+asyncpg://ragproject:ragproject@localhost:5432/ragproject
 REDIS_URL=redis://localhost:6379
 SQL_ECHO=False
 ```
 
-> Changing `GROQ_EMBED_MODEL`/`EMBEDDING_DIMENSIONS` requires a migration that
+> Changing `GEMINI_EMBED_MODEL`/`EMBEDDING_DIMENSIONS` requires a migration that
 > wipes stored vectors and resizes the column (pgvector needs an exact match).
+> `GET /health` reports the embedding provider's start-up self-check result.
 
 ---
 

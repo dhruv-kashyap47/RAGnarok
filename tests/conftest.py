@@ -31,7 +31,7 @@ TEST_SYNC_DB_URL = (
 )
 
 # Must match Vector(768) from migration b7e1c4a92f6d / the documents model
-# (Groq nomic-embed-text-v1_5 output width).
+# (Gemini gemini-embedding-001 requested at 768 output dimensions).
 TEST_EMBED_DIM = 768
 
 # --- Environment (before any app import) ----------------------------------
@@ -42,6 +42,7 @@ os.environ["DATABASE_URL"] = (
 os.environ["SQL_ECHO"] = "false"
 # Never talk to real provider APIs from the test suite.
 os.environ["GROQ_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""
 # Real test Redis so the Redis-backed rate limiter's Lua path is exercised.
 os.environ["REDIS_URL"] = TEST_REDIS_URL
 # Small body cap keeps the 413 test fast; test uploads stay well under it.

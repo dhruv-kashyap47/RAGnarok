@@ -32,6 +32,11 @@ STATIC_DIR = BASE_DIR / "static"
 async def lifespan(app: FastAPI):
     # Startup: schema changes are managed via Alembic migrations (see
     # start.sh), so startup stays side-effect free to avoid schema drift.
+    # The embedding provider is probed once so a bad key/model shows up in
+    # the logs and /health instead of surfacing on the first user upload.
+    from app.services.embedding_service import probe_embeddings
+
+    await probe_embeddings()
     yield
     # Shutdown: release shared external resources cleanly.
     from app.core.redis import close_redis
@@ -109,7 +114,14 @@ async def api_root():
 # ---------------- Health ----------------
 @app.get("/health")
 async def health():
+    # Always 200 so platform health checks keep the service alive even when a
+    # provider is down; the payload carries the diagnostic instead.
+    from app.services.embedding_service import get_embedding_health
+
+    embeddings = get_embedding_health()
     return {
         "status": "ok",
+        "degraded": embeddings["ok"] is False,
         "cors_origins": CORS_ORIGINS,
+        "embeddings": embeddings,
     }

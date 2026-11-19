@@ -758,6 +758,10 @@
         background: var(--amber);
         animation: blink 0.8s infinite;
       }
+      .health-dot.warn {
+        background: var(--amber);
+        box-shadow: 0 0 8px rgba(255, 193, 7, 0.45);
+      }
       @keyframes blink {
         0%,
         100% {
@@ -775,6 +779,13 @@
       .health-text strong {
         color: var(--text);
         display: block;
+      }
+      .health-text span {
+        display: block;
+        max-width: 420px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .stats-row {
@@ -1661,6 +1672,8 @@
 
     <script>
       const API = window.location.origin;
+      let healthTimer = null;
+      let healthChecked = false;
       const state = {
         token: localStorage.getItem("rag_token") || null,
         guestToken: localStorage.getItem("rag_guest_token") || null,
@@ -1697,7 +1710,9 @@
         try {
           r = await fetch(`${API}/guest-session`, { method: "POST" });
         } catch {
-          throw new Error("Unable to reach the backend.");
+          throw new Error(
+            "Can't reach the server. It may still be starting up — please retry in a few seconds.",
+          );
         }
         const data = await parseRes(r);
         if (!r.ok) {
@@ -1967,7 +1982,7 @@
         return true;
       }
 
-      async function apiFetch(path, opts = {}, _retried = false) {
+      async function apiFetch(path, opts = {}, _retried = false, _netRetried = false) {
         const headers = { ...(opts.headers || {}) };
         const token = authToken();
         if (token) headers.Authorization = `Bearer ${token}`;
@@ -1975,7 +1990,15 @@
         try {
           r = await fetch(`${API}${path}`, { ...opts, headers });
         } catch {
-          throw new Error("Unable to reach the backend.");
+          // One retry rides out a free-tier cold start or a brief network
+          // blip instead of immediately telling the user we are offline.
+          if (!_netRetried) {
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            return apiFetch(path, opts, _retried, true);
+          }
+          throw new Error(
+            "Can't reach the server. It may still be starting up — please retry in a few seconds.",
+          );
         }
         const data = await parseRes(r);
         if (!r.ok) {
@@ -1988,7 +2011,7 @@
             // guests working even after their 7-day token expires.
             if (!_retried) {
               const recovered = await handleSessionExpired();
-              if (recovered) return apiFetch(path, opts, true);
+              if (recovered) return apiFetch(path, opts, true, _netRetried);
             }
             throw new Error("Session expired. Please sign in again.");
           }
@@ -2226,17 +2249,52 @@
 
       async function checkHealth() {
         const dot = q("health-dot");
-        dot.className = "health-dot checking";
+        // Only show the "checking" blink before the first result; otherwise
+        // every poll would make a healthy badge flicker.
+        if (!healthChecked) dot.className = "health-dot checking";
         try {
           const data = await apiFetch("/health", { headers: {} });
-          dot.className = "health-dot live";
-          q("health-head").textContent = "Backend healthy";
-          q("health-copy").textContent = `Status: ${data.status}`;
+          healthChecked = true;
+          const embeddings = data.embeddings || {};
+          if (embeddings.ok === false) {
+            // The API is up, so "Backend offline" would be a lie: say exactly
+            // which subsystem is broken and why.
+            dot.className = "health-dot warn";
+            q("health-head").textContent = "Embeddings unavailable";
+            q("health-copy").textContent =
+              embeddings.error || "Embedding provider is not configured.";
+            q("health-copy").title = q("health-copy").textContent;
+          } else {
+            dot.className = "health-dot live";
+            q("health-head").textContent = "Backend healthy";
+            q("health-copy").textContent = data.degraded
+              ? "Status: degraded"
+              : `Status: ${data.status} · ${
+                  embeddings.dimensions || "?"
+                }-dim vectors`;
+            q("health-copy").title = q("health-copy").textContent;
+          }
         } catch (err) {
+          healthChecked = true;
           dot.className = "health-dot down";
           q("health-head").textContent = "Backend offline";
           q("health-copy").textContent = err.message;
+          q("health-copy").title = err.message;
         }
+      }
+
+      function startHealthPolling() {
+        if (healthTimer) return;
+        checkHealth();
+        // Recover automatically instead of staying red after one bad request
+        // (e.g. a free-tier cold start). Skip work while the tab is hidden.
+        healthTimer = setInterval(() => {
+          if (!document.hidden) checkHealth();
+        }, 30000);
+        window.addEventListener("online", checkHealth);
+        document.addEventListener("visibilitychange", () => {
+          if (!document.hidden) checkHealth();
+        });
       }
 
       async function loadDocuments() {
@@ -2670,6 +2728,7 @@
         // Guest-first: boot straight into the workspace (minting a guest
         // session when needed) instead of gating everything behind a login.
         boot();
+        startHealthPolling();
       });
     </script>
   </body>

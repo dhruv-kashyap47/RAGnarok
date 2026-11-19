@@ -90,14 +90,24 @@ TRUST_PROXY_HEADERS = get_bool_env("TRUST_PROXY_HEADERS", False)
 # Expose /docs, /redoc and /openapi.json (disable in internet-facing prod).
 DOCS_ENABLED = get_bool_env("DOCS_ENABLED", True)
 
-# Groq is the only LLM/embedding provider (free developer tier models).
+# Groq serves chat completions (free developer tier models).
 GROQ_API_KEY = get_env("GROQ_API_KEY")
 GROQ_API_BASE = get_env("GROQ_API_BASE", "https://api.groq.com/openai/v1")
 GROQ_CHAT_MODEL = get_env("GROQ_CHAT_MODEL", "llama-3.1-8b-instant")
-GROQ_EMBED_MODEL = get_env("GROQ_EMBED_MODEL", "nomic-embed-text-v1_5")
-# nomic-embed-text-v1_5 outputs 768-dim vectors. The value must match the
-# stored column width (migration wipes + alters the column on change) and
-# stay under pgvector's 2000-dim HNSW cap so ANN indexing stays possible.
+
+# Embeddings run on Gemini: Groq's `nomic-embed-text-v1_5` model is not
+# available to normal API keys (POST /embeddings returns 404), so it cannot
+# back a production RAG pipeline. gemini-embedding-001 defaults to 3072 dims
+# but accepts outputDimensionality, so we request EMBEDDING_DIMENSIONS.
+GEMINI_API_KEY = get_env("GEMINI_API_KEY")
+GEMINI_API_BASE = get_env(
+    "GEMINI_API_BASE",
+    "https://generativelanguage.googleapis.com/v1beta/models",
+)
+GEMINI_EMBED_MODEL = get_env("GEMINI_EMBED_MODEL", "gemini-embedding-001")
+# Width of the stored vectors. Must match the documents.embedding column
+# (migration wipes + alters the column on change) and stay under pgvector's
+# 2000-dim HNSW cap so ANN indexing stays possible.
 EMBEDDING_DIMENSIONS = _get_int_env("EMBEDDING_DIMENSIONS", 768)
 if EMBEDDING_DIMENSIONS <= 0:
     raise RuntimeError("EMBEDDING_DIMENSIONS must be a positive integer")

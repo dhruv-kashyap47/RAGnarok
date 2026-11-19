@@ -7,6 +7,11 @@ def test_health(client):
     body = response.json()
     assert body["status"] == "ok"
     assert "cors_origins" in body
+    # The startup probe runs with no GEMINI_API_KEY in tests, so the payload
+    # must say embeddings are unavailable instead of pretending all is well.
+    assert body["degraded"] is True
+    assert body["embeddings"]["ok"] is False
+    assert body["embeddings"]["provider"] == "gemini"
 
 
 def test_api_root(client):
@@ -76,12 +81,13 @@ def test_health_does_not_leak_secrets(client):
     assert "gsk_" not in body
 
 
-def test_capabilities_reports_groq_and_768_dimensions(client):
+def test_capabilities_reports_groq_chat_and_gemini_embeddings(client):
     from app.core.config import EMBEDDING_DIMENSIONS, GROQ_CHAT_MODEL
 
     body = client.get("/capabilities").json()
-    assert body["llm_provider"] in {"groq", "unconfigured"}  # never another vendor
-    assert "gemini" not in str(body).lower()
+    assert body["llm_provider"] in {"groq", "unconfigured"}
     assert body["llm_model"] == GROQ_CHAT_MODEL
-    assert body["embedding_provider"] == "groq"
+    # Embeddings moved off Groq: its nomic model 404s for normal API keys.
+    assert body["embedding_provider"] == "gemini"
     assert body["embedding_dimensions"] == EMBEDDING_DIMENSIONS == 768
+    assert body["embeddings_ok"] is False  # no key in tests

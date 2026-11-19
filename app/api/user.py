@@ -40,6 +40,8 @@ from app.schemas.user import UserCreate, UserLogin
 from app.services.chunking import chunk_text
 from app.services.embedding_service import (
     get_embedding_dimensions,
+    get_embedding_health,
+    get_embedding_model,
     get_embedding_provider,
     get_embeddings,
 )
@@ -197,11 +199,14 @@ async def delete_user_document(
 
 @router.get("/capabilities")
 async def get_capabilities():
+    embeddings = get_embedding_health()
     return {
         "llm_provider": get_llm_provider(),
         "llm_model": get_llm_model(),
         "embedding_provider": get_embedding_provider(),
+        "embedding_model": get_embedding_model(),
         "embedding_dimensions": get_embedding_dimensions(),
+        "embeddings_ok": embeddings["ok"],
     }
 
 
