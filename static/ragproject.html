@@ -1442,6 +1442,31 @@
               Create Account →
             </button>
           </form>
+          <div
+            class="auth-guest"
+            style="margin-top: 18px; text-align: center"
+          >
+            <button
+              class="btn-ghost"
+              id="guest-btn"
+              type="button"
+              onclick="continueAsGuest()"
+              style="width: 100%"
+            >
+              Continue as guest →
+            </button>
+            <p
+              style="
+                margin: 10px 0 0;
+                font-size: 11px;
+                line-height: 1.6;
+                opacity: 0.65;
+              "
+            >
+              No account needed. Documents you upload as a guest merge into
+              your account when you sign up or log in.
+            </p>
+          </div>
         </div>
       </div>
     </main>
@@ -1507,7 +1532,17 @@
           <button class="btn-ghost" onclick="refreshWorkspace()">
             Refresh
           </button>
-          <button class="btn-danger" onclick="logout()">Logout</button>
+          <button
+            class="btn-ghost"
+            id="signin-btn"
+            onclick="showAuthScreen()"
+            style="display: none"
+          >
+            Sign in
+          </button>
+          <button class="btn-danger" id="logout-btn" onclick="logout()">
+            Logout
+          </button>
         </div>
       </aside>
 
@@ -1628,6 +1663,11 @@
       const API = window.location.origin;
       const state = {
         token: localStorage.getItem("rag_token") || null,
+        guestToken: localStorage.getItem("rag_guest_token") || null,
+        guestId: localStorage.getItem("rag_guest_id") || null,
+        guestEmail: localStorage.getItem("rag_guest_email") || null,
+        // Guests are the default: anyone can ask/upload before signing in.
+        mode: localStorage.getItem("rag_token") ? "user" : "guest",
         profile: null,
         documents: [],
         capabilities: null,
@@ -1636,6 +1676,57 @@
         booting: false,
         sending: false,
       };
+
+      function authToken() {
+        return state.mode === "user" && state.token
+          ? state.token
+          : state.guestToken;
+      }
+
+      function clearGuestSession() {
+        state.guestToken = null;
+        state.guestId = null;
+        state.guestEmail = null;
+        localStorage.removeItem("rag_guest_token");
+        localStorage.removeItem("rag_guest_id");
+        localStorage.removeItem("rag_guest_email");
+      }
+
+      async function mintGuestSession() {
+        let r;
+        try {
+          r = await fetch(`${API}/guest-session`, { method: "POST" });
+        } catch {
+          throw new Error("Unable to reach the backend.");
+        }
+        const data = await parseRes(r);
+        if (!r.ok) {
+          throw new Error(
+            typeof data === "string"
+              ? data
+              : data?.message ||
+                  data?.detail ||
+                  "Could not start a guest session.",
+          );
+        }
+        state.mode = "guest";
+        state.guestToken = data.access_token;
+        state.guestId = data.user_id || "guest";
+        state.guestEmail = data.email || "guest@local";
+        localStorage.setItem("rag_guest_token", state.guestToken);
+        localStorage.setItem("rag_guest_id", state.guestId);
+        localStorage.setItem("rag_guest_email", state.guestEmail);
+        return state.guestToken;
+      }
+
+      function renderIdentity(email, role, avatar) {
+        q("user-avatar").textContent = avatar;
+        q("user-email").textContent = email;
+        q("user-role").textContent = role;
+        const isGuest = role === "guest";
+        q("signin-btn").style.display = isGuest ? "" : "none";
+        q("logout-btn").style.display = isGuest ? "none" : "";
+      }
 
       const q = (id) => document.getElementById(id);
       const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1854,9 +1945,32 @@
         }
       }
 
-      async function apiFetch(path, opts = {}) {
+      async function handleSessionExpired() {
+        // Expired account or guest token: silently continue as a fresh guest.
+        state.mode = "guest";
+        state.token = null;
+        state.profile = null;
+        localStorage.removeItem("rag_token");
+        clearGuestSession();
+        try {
+          await mintGuestSession();
+        } catch {
+          showAuthScreen();
+          return false;
+        }
+        state.profile = {
+          id: state.guestId,
+          email: state.guestEmail,
+          role: "guest",
+        };
+        renderIdentity("Guest session", "guest", "G");
+        return true;
+      }
+
+      async function apiFetch(path, opts = {}, _retried = false) {
         const headers = { ...(opts.headers || {}) };
-        if (state.token) headers.Authorization = `Bearer ${state.token}`;
+        const token = authToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
         let r;
         try {
           r = await fetch(`${API}${path}`, { ...opts, headers });
@@ -1870,8 +1984,13 @@
               ? data
               : data?.message || data?.detail || "Request failed";
           if (r.status === 401) {
-            logout();
-            throw new Error("Session expired.");
+            // One transparent retry on a freshly minted guest session keeps
+            // guests working even after their 7-day token expires.
+            if (!_retried) {
+              const recovered = await handleSessionExpired();
+              if (recovered) return apiFetch(path, opts, true);
+            }
+            throw new Error("Session expired. Please sign in again.");
           }
           throw new Error(msg);
         }
@@ -1895,12 +2014,19 @@
         try {
           const data = await apiFetch("/users", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(state.guestToken
+                ? { "X-Guest-Token": state.guestToken }
+                : {}),
+            },
             body: JSON.stringify({
               email: q("register-email").value.trim(),
               password: q("register-password").value,
             }),
           });
+          // Guest documents were merged into the new account server-side.
+          clearGuestSession();
           const registeredEmail = q("register-email").value.trim();
           q("login-email").value = registeredEmail;
           q("register-email").value = "";
@@ -1908,7 +2034,7 @@
           switchAuth("login");
           showAlert(
             "auth-alert",
-            `Account created for ${data.email}. Sign in to continue.`,
+            `Account created for ${data.email}. Sign in to continue — your guest documents are already saved to it.`,
             "success",
           );
         } catch (err) {
@@ -1919,25 +2045,50 @@
         }
       }
 
+      function mergeGuestConversations(guestId, userId) {
+        if (!guestId || !userId || guestId === userId) return false;
+        const from = `rag_conversations_${guestId}`;
+        const to = `rag_conversations_${userId}`;
+        const raw = localStorage.getItem(from);
+        if (!raw) return false;
+        if (!localStorage.getItem(to)) localStorage.setItem(to, raw);
+        localStorage.removeItem(from);
+        return true;
+      }
+
       async function login(e) {
         e.preventDefault();
         clearAlert("auth-alert");
         const btn = q("login-btn");
         btn.disabled = true;
         btn.textContent = "Authenticating...";
+        const previousGuestId = state.guestId;
         try {
           const data = await apiFetch("/login", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(state.guestToken
+                ? { "X-Guest-Token": state.guestToken }
+                : {}),
+            },
             body: JSON.stringify({
               email: q("login-email").value.trim(),
               password: q("login-password").value,
             }),
           });
+          state.mode = "user";
           state.token = data.access_token;
           localStorage.setItem("rag_token", state.token);
+          clearGuestSession();
           q("login-password").value = "";
           await boot();
+          if (mergeGuestConversations(previousGuestId, state.profile?.id)) {
+            loadPersistedConversations();
+            if (!state.conversations.length) newConversation();
+            renderConvList();
+            renderMessages();
+          }
         } catch (err) {
           showAlert("auth-alert", err.message, "error");
         } finally {
@@ -1946,10 +2097,12 @@
         }
       }
 
-      function logout() {
+      async function logout() {
         localStorage.removeItem("rag_token");
+        clearGuestSession();
         Object.assign(state, {
           token: null,
+          mode: "guest",
           profile: null,
           documents: [],
           capabilities: null,
@@ -1959,12 +2112,32 @@
           sending: false,
         });
         q("workspace").classList.add("hidden");
-        q("auth-screen").classList.remove("hidden");
+        q("auth-screen").classList.add("hidden");
         renderDocuments();
+        try {
+          // Guest-first: logging out lands you in a fresh guest session.
+          await mintGuestSession();
+          await boot();
+        } catch (err) {
+          q("auth-screen").classList.remove("hidden");
+          showAlert("auth-alert", err.message, "error");
+        }
+      }
+
+      function showAuthScreen() {
+        clearAlert("auth-alert");
+        q("auth-screen").classList.remove("hidden");
+        q("workspace").classList.add("hidden");
+      }
+
+      async function continueAsGuest() {
+        clearAlert("auth-alert");
+        state.booting = false;
+        await boot();
       }
 
       async function boot() {
-        if (!state.token || state.booting) return;
+        if (state.booting) return;
 
         state.booting = true;
         clearAlert("auth-alert");
@@ -1972,20 +2145,21 @@
         q("workspace").classList.remove("hidden");
 
         try {
-          const [profile] = await Promise.all([
-            apiFetch("/me"),
-            loadCapabilities(),
-          ]);
-          state.profile = profile;
-          loadPersistedConversations();
-          q("user-avatar").textContent = (state.profile.email || "U")
-            .slice(0, 1)
-            .toUpperCase();
-          q("user-email").textContent = state.profile.email;
-          q("user-role").textContent =
-            state.profile.role || state.capabilities?.llm_provider || "user";
-          if (!state.conversations.length) newConversation();
-          await refreshWorkspace();
+          if (state.mode === "user" && state.token) {
+            try {
+              await bootUser();
+            } catch {
+              // Expired/invalid account token: continue as guest instead of
+              // stranding the visitor on a dead auth screen.
+              state.mode = "guest";
+              state.token = null;
+              state.profile = null;
+              localStorage.removeItem("rag_token");
+              await bootGuest();
+            }
+          } else {
+            await bootGuest();
+          }
         } catch (err) {
           q("workspace").classList.add("hidden");
           q("auth-screen").classList.remove("hidden");
@@ -1993,6 +2167,36 @@
         } finally {
           state.booting = false;
         }
+      }
+
+      async function bootUser() {
+        const [profile] = await Promise.all([
+          apiFetch("/me"),
+          loadCapabilities(),
+        ]);
+        state.profile = profile;
+        renderIdentity(
+          profile.email,
+          profile.role || "user",
+          (profile.email || "U").slice(0, 1).toUpperCase(),
+        );
+        loadPersistedConversations();
+        if (!state.conversations.length) newConversation();
+        await refreshWorkspace();
+      }
+
+      async function bootGuest() {
+        if (!state.guestToken) await mintGuestSession();
+        state.profile = {
+          id: state.guestId,
+          email: state.guestEmail || "guest@local",
+          role: "guest",
+        };
+        renderIdentity("Guest session", "guest", "G");
+        await loadCapabilities();
+        loadPersistedConversations();
+        if (!state.conversations.length) newConversation();
+        await refreshWorkspace();
       }
 
       async function refreshWorkspace() {
@@ -2036,7 +2240,7 @@
       }
 
       async function loadDocuments() {
-        if (!state.token) {
+        if (!authToken()) {
           state.documents = [];
           renderDocuments();
           return;
@@ -2075,18 +2279,10 @@
         try {
           const fd = new FormData();
           fd.append("file", file);
-          const r = await fetch(`${API}/upload-pdf`, {
+          const data = await apiFetch("/upload-pdf", {
             method: "POST",
             body: fd,
-            headers: { Authorization: `Bearer ${state.token}` },
           });
-          const data = await parseRes(r);
-          if (!r.ok)
-            throw new Error(
-              typeof data === "string"
-                ? data
-                : data?.message || data?.detail || "Upload failed",
-            );
           q("stat-chunks").textContent = data.chunks;
           showUpload(`✓ ${file.name} — ${data.chunks} chunks`, "ok");
           q("pdf-file").value = "";
@@ -2316,13 +2512,34 @@
         el.style.height = Math.min(el.scrollHeight, 160) + "px";
       }
 
+      async function askRequest(text, history, retried = false) {
+        const token = authToken();
+        const res = await fetch(`${API}/ask`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            question: text,
+            history,
+          }),
+        });
+        // Expired guest token: refresh the session and retry once.
+        if (res.status === 401 && !retried) {
+          const recovered = await handleSessionExpired();
+          if (recovered) return askRequest(text, history, true);
+        }
+        return res;
+      }
+
       async function sendMessage() {
         clearAlert("chat-alert");
         if (state.sending) return;
-        if (!state.token) {
+        if (!authToken()) {
           showAlert(
             "chat-alert",
-            "Sign in to continue the conversation.",
+            "Your session is not ready yet. Please try again.",
             "error",
           );
           return;
@@ -2369,19 +2586,7 @@
         btn.disabled = true;
         q("composer-hint").textContent = "// retrieving from knowledge base...";
         try {
-          const res = await fetch(`${API}/ask`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(state.token
-                ? { Authorization: `Bearer ${state.token}` }
-                : {}),
-            },
-            body: JSON.stringify({
-              question: text,
-              history,
-            }),
-          });
+          const res = await askRequest(text, history);
 
           if (!res.ok) {
             let msg = "Request failed";
@@ -2462,7 +2667,9 @@
 
       window.addEventListener("load", () => {
         renderDocuments();
-        if (state.token) boot();
+        // Guest-first: boot straight into the workspace (minting a guest
+        // session when needed) instead of gating everything behind a login.
+        boot();
       });
     </script>
   </body>

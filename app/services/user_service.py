@@ -1,11 +1,16 @@
 import json
+import secrets
+import uuid
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from app.core.config import GUEST_CLEANUP_DAYS, GUEST_TOKEN_EXPIRE_DAYS
 from app.core.logger import logger
 from app.core.redis import safe_cache_get, safe_cache_set
 from app.core.security import (
@@ -14,6 +19,7 @@ from app.core.security import (
     password_needs_rehash,
     verify_password,
 )
+from app.models.documents import Document, DocumentFile
 from app.models.user import User
 
 # Computed lazily on first use: hashing a throwaway password keeps the
@@ -34,7 +40,7 @@ class UserService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_user(self, email: str, password: str):
+    async def create_user(self, email: str, password: str, guest_id: str | None = None):
         normalized_email = email.strip().lower()
         logger.info("Create user request: email=%s", normalized_email)
 
@@ -56,6 +62,12 @@ class UserService:
                 role="user",
             )
             self.db.add(new_user)
+            await self.db.flush()  # assigns id so the guest claim can run first
+
+            # Merge any guest-session documents into the new account in the
+            # same transaction, so a later failure cannot leave them behind.
+            await self._claim_guest(guest_id, new_user.id)
+
             await self.db.commit()
             await self.db.refresh(new_user)
 
@@ -79,7 +91,9 @@ class UserService:
             logger.error("Error creating user: %s", e)
             raise
 
-    async def login_user(self, email: str, password: str):
+    async def login_user(
+        self, email: str, password: str, guest_id: str | None = None
+    ):
         normalized_email = email.strip().lower()
 
         try:
@@ -99,8 +113,12 @@ class UserService:
 
             if password_needs_rehash(db_user.password):
                 db_user.password = await run_in_threadpool(hash_password, password)
-                await self.db.commit()
-                await self.db.refresh(db_user)
+
+            # Merge guest-session documents into this account (no-op unless a
+            # valid guest token accompanied the login).
+            await self._claim_guest(guest_id, db_user.id)
+            await self.db.commit()
+            await self.db.refresh(db_user)
 
             access_token = create_access_token(
                 data={"user_id": str(db_user.id), "role": db_user.role}
@@ -121,6 +139,105 @@ class UserService:
         except Exception as e:
             await self.db.rollback()
             logger.error("Login error: %s", e)
+            raise
+
+    async def _claim_guest(self, guest_id, new_user_id) -> int:
+        """Move a guest session's documents into *new_user_id*'s account.
+
+        Only rows of a real ``role='guest'`` user are ever claimed, so a
+        forged/leaked token can never steal another registered user's data.
+        The guest row itself is kept as a tombstone: its JWT may still be
+        alive, and document_files.user_id is NOT NULL (a reaped row would
+        make late guest uploads 500). Abandoned guests are reaped by
+        :meth:`_reap_stale_guests` once the token can no longer be valid.
+        """
+        if not guest_id or new_user_id is None or str(guest_id) == str(new_user_id):
+            return 0
+        try:
+            guest_uuid = UUID(str(guest_id))
+            new_uuid = UUID(str(new_user_id))
+        except (ValueError, TypeError, AttributeError):
+            return 0
+
+        guest_row = await self.db.execute(
+            select(User.id).where(User.id == guest_uuid, User.role == "guest")
+        )
+        if guest_row.first() is None:
+            return 0
+
+        files = await self.db.execute(
+            update(DocumentFile)
+            .where(DocumentFile.user_id == guest_uuid)
+            .values(user_id=new_uuid)
+        )
+        docs = await self.db.execute(
+            update(Document)
+            .where(Document.user_id == guest_uuid)
+            .values(user_id=new_uuid)
+        )
+        moved = (files.rowcount or 0) + (docs.rowcount or 0)
+        if moved:
+            logger.info(
+                "Claimed guest session %s -> user %s (%d rows)",
+                guest_uuid,
+                new_uuid,
+                moved,
+            )
+        return moved
+
+    async def _reap_stale_guests(self) -> None:
+        """Delete docless guest accounts older than GUEST_CLEANUP_DAYS.
+
+        Runs opportunistically when minting a new guest session. Guests that
+        still own documents are kept (their data is the merge payload).
+        """
+        cutoff = datetime.now(UTC) - timedelta(days=GUEST_CLEANUP_DAYS)
+        stmt = delete(User).where(
+            User.role == "guest",
+            User.created_at < cutoff,
+            ~exists(select(DocumentFile.id).where(DocumentFile.user_id == User.id)),
+            ~exists(select(Document.id).where(Document.user_id == User.id)),
+        )
+        result = await self.db.execute(stmt)
+        if result.rowcount:
+            logger.info("Reaped %d stale guest accounts", result.rowcount)
+
+    async def create_guest(self) -> dict:
+        """Create a guest user row and mint a long-lived guest JWT."""
+        try:
+            await self._reap_stale_guests()
+
+            # bcrypt hash of a random secret (never a sentinel/plaintext
+            # value: verify_password has a plaintext fallback path).
+            secret = secrets.token_urlsafe(32)
+            hashed = await run_in_threadpool(hash_password, secret)
+
+            guest = User(
+                email=f"guest-{uuid.uuid4().hex}@guest.local",
+                password=hashed,
+                role="guest",
+            )
+            self.db.add(guest)
+            await self.db.commit()
+            await self.db.refresh(guest)
+
+            token = create_access_token(
+                data={"user_id": str(guest.id), "role": "guest"},
+                expires_delta=timedelta(days=GUEST_TOKEN_EXPIRE_DAYS),
+            )
+            logger.info("Guest session created: id=%s", guest.id)
+            return {
+                "access_token": token,
+                "token_type": "bearer",
+                "role": "guest",
+                "user_id": str(guest.id),
+                "email": guest.email,
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            await self.db.rollback()
+            logger.error("Error creating guest session: %s", e)
             raise
 
     async def get_user_by_id(self, user_id: str):
@@ -155,7 +272,8 @@ class UserService:
 
     async def get_users(self, skip: int = 0, limit: int = 10, email: str | None = None):
         try:
-            query = select(User)
+            # Guest accounts are internal session rows, never listed.
+            query = select(User).where(User.role != "guest")
             if email:
                 query = query.where(User.email == email)
 

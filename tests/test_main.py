@@ -72,5 +72,16 @@ def test_cors_preflight_allows_configured_origins(client):
 def test_health_does_not_leak_secrets(client):
     body = client.get("/health").text
     assert "SECRET_KEY" not in body
-    assert "GEMINI_API_KEY" not in body
+    assert "GROQ_API_KEY" not in body
     assert "gsk_" not in body
+
+
+def test_capabilities_reports_groq_and_768_dimensions(client):
+    from app.core.config import EMBEDDING_DIMENSIONS, GROQ_CHAT_MODEL
+
+    body = client.get("/capabilities").json()
+    assert body["llm_provider"] in {"groq", "unconfigured"}  # never another vendor
+    assert "gemini" not in str(body).lower()
+    assert body["llm_model"] == GROQ_CHAT_MODEL
+    assert body["embedding_provider"] == "groq"
+    assert body["embedding_dimensions"] == EMBEDDING_DIMENSIONS == 768

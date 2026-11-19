@@ -22,12 +22,17 @@ TEST_DB_PORT = 5433
 TEST_DB_NAME = "ragproject_test"
 CONTAINER_NAME = "ragproject-test-postgres"
 
+TEST_REDIS_PORT = 6380
+TEST_REDIS_CONTAINER = "ragproject-test-redis"
+TEST_REDIS_URL = f"redis://{TEST_DB_HOST}:{TEST_REDIS_PORT}"
+
 TEST_SYNC_DB_URL = (
     f"postgresql://ragproject:ragproject@{TEST_DB_HOST}:{TEST_DB_PORT}/{TEST_DB_NAME}"
 )
 
-# Must match Vector(3072) from migration f3e8f8a12345 / the documents model.
-TEST_EMBED_DIM = 3072
+# Must match Vector(768) from migration b7e1c4a92f6d / the documents model
+# (Groq nomic-embed-text-v1_5 output width).
+TEST_EMBED_DIM = 768
 
 # --- Environment (before any app import) ----------------------------------
 os.environ["SECRET_KEY"] = "test-secret-key-" + "0123456789abcdef" * 4
@@ -36,10 +41,9 @@ os.environ["DATABASE_URL"] = (
 )
 os.environ["SQL_ECHO"] = "false"
 # Never talk to real provider APIs from the test suite.
-os.environ["GEMINI_API_KEY"] = ""
 os.environ["GROQ_API_KEY"] = ""
-# Point at a closed port: caching stays off and reconnects are backed off.
-os.environ["REDIS_URL"] = f"redis://{TEST_DB_HOST}:1"
+# Real test Redis so the Redis-backed rate limiter's Lua path is exercised.
+os.environ["REDIS_URL"] = TEST_REDIS_URL
 # Small body cap keeps the 413 test fast; test uploads stay well under it.
 os.environ["MAX_REQUEST_BODY_BYTES"] = str(1024 * 1024)
 # Generous defaults so functional tests never trip limits; the dedicated
@@ -138,15 +142,86 @@ def _ensure_test_database() -> None:
         )
 
 
+def _ensure_test_redis() -> None:
+    """Start a throwaway Redis so the limiter's Lua path runs in tests."""
+    if shutil.which("docker") is None:
+        pytest.skip("Docker is required for the integration test suite")
+
+    existing = _docker(
+        "ps", "-a", "--filter", f"name={TEST_REDIS_CONTAINER}", "--format", "{{.Names}}"
+    )
+    if TEST_REDIS_CONTAINER in existing.stdout:
+        _docker("start", TEST_REDIS_CONTAINER)
+    else:
+        result = _docker(
+            "run",
+            "-d",
+            "--name",
+            TEST_REDIS_CONTAINER,
+            "-p",
+            f"{TEST_REDIS_PORT}:6379",
+            "redis:7-alpine",
+            timeout=600,  # first run may pull the image
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Could not start test Redis: {result.stderr}")
+
+    import redis as sync_redis
+
+    last_exc: Exception | None = None
+    for _ in range(60):
+        try:
+            client = sync_redis.Redis.from_url(
+                TEST_REDIS_URL, socket_connect_timeout=2, socket_timeout=2
+            )
+            try:
+                client.ping()
+            finally:
+                client.close()
+            break
+        except Exception as exc:  # noqa: BLE001 - retry startup
+            last_exc = exc
+            time.sleep(1)
+    else:
+        raise RuntimeError(f"Test Redis never became ready: {last_exc}")
+
+    # Clear any failed-connect backoff recorded by earlier unit tests so the
+    # app under test uses the Lua path from its very first request.
+    from app.core import redis as app_redis
+
+    app_redis._client = None
+    app_redis._next_retry_at = 0.0
+
+
 @pytest.fixture(scope="session")
-def database_ready():
-    """Start a pgvector container and migrate the test database once."""
+def infra_ready():
+    """Start pgvector + Redis containers and migrate the test DB once."""
     _ensure_test_database()
+    _ensure_test_redis()
     yield
 
 
 @pytest.fixture()
-def client(database_ready):
+def _db_cleanup(infra_ready):
+    """Wipe all tenant data before/after each test for deterministic counts."""
+    import psycopg2
+
+    def _truncate():
+        conn = psycopg2.connect(TEST_SYNC_DB_URL)
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cur:
+                cur.execute("TRUNCATE users, document_files, documents CASCADE")
+        finally:
+            conn.close()
+
+    _truncate()
+    yield
+    _truncate()
+
+
+@pytest.fixture()
+def client(infra_ready, _db_cleanup):
     """FastAPI TestClient with lifespan startup/shutdown (real app, real DB)."""
     from app.main import app
 
@@ -155,7 +230,7 @@ def client(database_ready):
 
 
 @pytest.fixture()
-def db_conn():
+def db_conn(infra_ready, _db_cleanup):
     """Direct synchronous connection for row-level assertions."""
     import psycopg2
 
@@ -167,13 +242,33 @@ def db_conn():
 
 # --- Shared helpers --------------------------------------------------------
 
+def _flush_redis_rate_keys() -> None:
+    """Drop ``rl:*`` buckets between tests (sync client: loop-agnostic)."""
+    try:
+        import redis as sync_redis
+
+        client = sync_redis.Redis.from_url(
+            TEST_REDIS_URL, socket_connect_timeout=2, socket_timeout=2
+        )
+        try:
+            keys = list(client.scan_iter("rl:*"))
+            if keys:
+                client.delete(*keys)
+        finally:
+            client.close()
+    except Exception:  # noqa: BLE001, S110 - unit tests run without containers
+        pass
+
+
 @pytest.fixture(autouse=True)
 def _reset_rate_limits():
     from app.core.rate_limit import reset_rate_limits
 
     reset_rate_limits()
+    _flush_redis_rate_keys()
     yield
     reset_rate_limits()
+    _flush_redis_rate_keys()
 
 
 @pytest.fixture(autouse=True)
@@ -206,6 +301,21 @@ def account(client):
 async def fake_embeddings(texts, task_type="RETRIEVAL_DOCUMENT"):
     """Deterministic embeddings for upload tests (identical vectors → hit 0)."""
     return [[0.25] * TEST_EMBED_DIM for _ in texts]
+
+
+@pytest.fixture()
+def guest_account(client):
+    """Mint a guest session; returns headers, guest token, user id and email."""
+    response = client.post("/guest-session")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["role"] == "guest"
+    return {
+        "headers": {"Authorization": f"Bearer {body['access_token']}"},
+        "guest_token": body["access_token"],
+        "user_id": body["user_id"],
+        "email": body["email"],
+    }
 
 
 @pytest.fixture()

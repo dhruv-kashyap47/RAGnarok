@@ -13,7 +13,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 _AUTH_HEADER = {"WWW-Authenticate": "Bearer"}
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+async def get_identity(token: str = Depends(oauth2_scheme)) -> dict:
+    """Resolve the caller from a Bearer JWT.
+
+    Accepts both registered-user tokens and guest-session tokens: guests may
+    ask questions and upload documents before registering. Returns the
+    identity dict (``user_id`` + ``role``); routes for registered users only
+    should depend on :func:`get_current_user` instead.
+    """
     identity = verify_access_token(token)
     if identity is None:
         raise HTTPException(
@@ -30,6 +37,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
             status_code=401, detail="Invalid or expired token", headers=_AUTH_HEADER
         )
 
+    return identity
+
+
+async def get_current_user(identity: dict = Depends(get_identity)) -> dict:
+    """Registered users only: guests get 403 (they may use ask/upload)."""
+    if identity.get("role") == "guest":
+        raise HTTPException(
+            status_code=403,
+            detail="This action requires a registered account.",
+        )
     return identity
 
 

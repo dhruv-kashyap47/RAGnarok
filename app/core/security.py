@@ -33,9 +33,18 @@ def password_needs_rehash(stored_password: str) -> bool:
         return True
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(
+    data: dict, expires_delta: timedelta | None = None
+) -> str:
+    """Sign *data* into a JWT.
+
+    ``expires_delta`` overrides the default ACCESS_TOKEN_EXPIRE_MINUTES
+    lifetime (used for long-lived guest session tokens).
+    """
     to_encode = data.copy()
-    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    if expires_delta is None:
+        expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(UTC) + expires_delta
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 

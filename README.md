@@ -29,10 +29,9 @@ Find meaning, not just keywords.
 ### 💬 Real-Time AI Chat (Streaming)
 
 Ask questions → get **instant, context-aware answers**
-Supports:
+Powered by:
 
-* Google Gemini
-* Groq
+* Groq **llama-3.1-8b-instant** (free developer tier)
 
 ### 🧠 True RAG Pipeline
 
@@ -43,13 +42,19 @@ Every answer is grounded in your documents.
 
 Upload, manage, and delete files easily — your data stays in your control.
 
+### 👤 Guest-First Access
+
+Anyone can ask questions and upload PDFs before registering. Sign up or log
+in later and your guest documents are merged into your account automatically.
+
 ---
 
 ## 🛠 Tech Stack (No BS)
 
 * **Backend:** FastAPI, SQLAlchemy, HTTPX
-* **Database:** PostgreSQL + pgvector
-* **LLMs:** Gemini (default), Groq (optional boost mode)
+* **Database:** PostgreSQL + pgvector (HNSW index)
+* **LLM + embeddings:** Groq only — `llama-3.1-8b-instant` for chat,
+  `nomic-embed-text-v1_5` (768-dim vectors) for embeddings
 * **Frontend:** Vanilla JS + HTML + modern CSS (fast, clean, no bloat)
 
 ---
@@ -60,8 +65,7 @@ Upload, manage, and delete files easily — your data stays in your control.
 
 * Docker + Docker Compose
 * Python 3.10+
-* Gemini API Key
-* (Optional) Groq API Key
+* Groq API Key (free developer tier)
 
 ---
 
@@ -71,13 +75,17 @@ Create `.env`:
 
 ```env
 SECRET_KEY=use-a-strong-random-64-char-string
-GEMINI_API_KEY=your_key_here
-GEMINI_CHAT_MODEL=gemini-2.0-flash-001
-GROQ_API_KEY=
+GROQ_API_KEY=your_key_here
+GROQ_CHAT_MODEL=llama-3.1-8b-instant
+GROQ_EMBED_MODEL=nomic-embed-text-v1_5
+EMBEDDING_DIMENSIONS=768
 DATABASE_URL=postgresql+asyncpg://ragproject:ragproject@localhost:5432/ragproject
 REDIS_URL=redis://localhost:6379
 SQL_ECHO=False
 ```
+
+> Changing `GROQ_EMBED_MODEL`/`EMBEDDING_DIMENSIONS` requires a migration that
+> wipes stored vectors and resizes the column (pgvector needs an exact match).
 
 ---
 

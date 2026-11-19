@@ -4,6 +4,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, DateTime, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
+from app.core.config import EMBEDDING_DIMENSIONS
 from app.db.database import Base
 
 
@@ -23,4 +24,4 @@ class Document(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     document_id = Column(UUID(as_uuid=True), ForeignKey("document_files.id"), nullable=True, index=True)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(3072))
+    embedding = Column(Vector(EMBEDDING_DIMENSIONS))

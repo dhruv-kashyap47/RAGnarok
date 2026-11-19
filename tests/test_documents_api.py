@@ -207,3 +207,37 @@ def test_hostile_filename_is_stored_not_used_as_path(client, account, mock_embed
     import os
 
     assert not os.path.exists(os.path.join(os.getcwd(), "evil.pdf"))
+
+
+# --- Guest uploads ---------------------------------------------------------
+
+
+def test_guest_can_upload_list_and_delete(client, guest_account, mock_embeddings, db_conn):
+    """Guest-first UX: full document lifecycle before registering."""
+    response = _upload(client, guest_account["headers"])
+    assert response.status_code == 200, response.text
+
+    listed = client.get("/documents", headers=guest_account["headers"]).json()
+    assert len(listed) == 1
+    assert listed[0]["filename"] == "report.pdf"
+
+    # Rows are owned by the guest user id.
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT user_id FROM document_files")
+        owners = [str(r[0]) for r in cur.fetchall()]
+    assert owners == [guest_account["user_id"]]
+
+    doc_id = response.json()["document_id"]
+    deleted = client.delete(f"/documents/{doc_id}", headers=guest_account["headers"])
+    assert deleted.status_code == 200
+    assert client.get("/documents", headers=guest_account["headers"]).json() == []
+
+
+def test_guest_document_is_isolated_from_other_guests(
+    client, guest_account, mock_embeddings
+):
+    _upload(client, guest_account["headers"])
+
+    other = client.post("/guest-session").json()
+    other_headers = {"Authorization": f"Bearer {other['access_token']}"}
+    assert client.get("/documents", headers=other_headers).json() == []

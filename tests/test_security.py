@@ -64,3 +64,16 @@ def test_garbage_token_is_rejected():
 def test_token_without_user_id_is_rejected():
     token = security.create_access_token({"role": "admin"})
     assert security.verify_access_token(token) is None
+
+
+def test_custom_expiry_extends_guest_token_lifetime():
+    """Guest sessions must outlive normal access tokens (default 7 days)."""
+    from datetime import UTC, datetime, timedelta
+
+    token = security.create_access_token(
+        {"user_id": str(uuid.uuid4()), "role": "guest"},
+        expires_delta=timedelta(days=7),
+    )
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    remaining = payload["exp"] - int(datetime.now(UTC).timestamp())
+    assert 7 * 86_400 - 120 < remaining <= 7 * 86_400

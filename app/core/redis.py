@@ -49,6 +49,11 @@ async def _get_client() -> aioredis.Redis | None:
         return None
 
 
+async def get_redis_client() -> aioredis.Redis | None:
+    """Public accessor: shared async client, or None while Redis is down."""
+    return await _get_client()
+
+
 async def close_redis() -> None:
     """Close the shared Redis client on application shutdown."""
     global _client

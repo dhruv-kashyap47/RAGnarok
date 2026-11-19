@@ -20,11 +20,19 @@ from starlette.concurrency import run_in_threadpool
 from app.core.config import (
     ASK_RATE_LIMIT_PER_MINUTE,
     AUTH_RATE_LIMIT_PER_MINUTE,
+    GUEST_SESSION_RATE_LIMIT_PER_MINUTE,
     REGISTER_RATE_LIMIT_PER_MINUTE,
     UPLOAD_RATE_LIMIT_PER_MINUTE,
 )
-from app.core.dependencies import get_current_user, get_user_service
-from app.core.rate_limit import auth_bucket, enforce_rate_limit
+from app.core.dependencies import get_current_user, get_identity, get_user_service
+from app.core.logger import logger
+from app.core.rate_limit import (
+    auth_bucket,
+    client_key,
+    enforce_identity_rate_limit,
+    enforce_rate_limit,
+)
+from app.core.security import verify_access_token
 from app.core.tasks import send_welcome_email
 from app.db.database import get_db
 from app.schemas.chat import ChatRequest
@@ -53,6 +61,26 @@ _EMBED_BATCH_SIZE = 100
 _MAX_QUESTION_LENGTH = 4000  # keep in sync with schemas.chat.ChatRequest
 
 
+def _guest_id_from_header(request: Request) -> str | None:
+    """Resolve the guest user id from an ``X-Guest-Token`` header.
+
+    Sent by the frontend on register/login so guest documents merge into the
+    new account. An invalid or expired token is ignored (authentication
+    still succeeds) — the merge is best-effort, never a hard failure.
+    """
+    raw = request.headers.get("x-guest-token")
+    if not raw:
+        return None
+    identity = verify_access_token(raw)
+    if identity is None or identity.get("role") != "guest":
+        logger.warning("X-Guest-Token invalid or not a guest; skipping guest merge")
+        return None
+    try:
+        return str(UUID(str(identity["user_id"])))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
 @router.post("/users")
 async def create_user(
     user: UserCreate,
@@ -60,12 +88,14 @@ async def create_user(
     background_tasks: BackgroundTasks,
     service: UserService = Depends(get_user_service),
 ):
-    enforce_rate_limit(
+    await enforce_rate_limit(
         request,
         auth_bucket(request, "register"),
         REGISTER_RATE_LIMIT_PER_MINUTE,
     )
-    result = await service.create_user(user.email, user.password)
+    result = await service.create_user(
+        user.email, user.password, guest_id=_guest_id_from_header(request)
+    )
     background_tasks.add_task(send_welcome_email, user.email)
     return result
 
@@ -76,12 +106,14 @@ async def login_user(
     request: Request,
     service: UserService = Depends(get_user_service),
 ):
-    enforce_rate_limit(
+    await enforce_rate_limit(
         request,
         auth_bucket(request, "login", user.email),
         AUTH_RATE_LIMIT_PER_MINUTE,
     )
-    return await service.login_user(user.email, user.password)
+    return await service.login_user(
+        user.email, user.password, guest_id=_guest_id_from_header(request)
+    )
 
 
 @router.post("/token")
@@ -90,20 +122,38 @@ async def login_for_access_token(
     request: Request = None,
     service: UserService = Depends(get_user_service),
 ):
-    enforce_rate_limit(
+    await enforce_rate_limit(
         request,
         auth_bucket(request, "login", form_data.username),
         AUTH_RATE_LIMIT_PER_MINUTE,
     )
-    return await service.login_user(form_data.username, form_data.password)
+    return await service.login_user(
+        form_data.username,
+        form_data.password,
+        guest_id=_guest_id_from_header(request),
+    )
+
+
+@router.post("/guest-session")
+async def create_guest_session(
+    request: Request,
+    service: UserService = Depends(get_user_service),
+):
+    """Mint a guest session so anyone can ask/upload before registering."""
+    await enforce_rate_limit(
+        request,
+        f"guest-session:{client_key(request)}",
+        GUEST_SESSION_RATE_LIMIT_PER_MINUTE,
+    )
+    return await service.create_guest()
 
 
 @router.get("/me")
 async def get_me(
-    current_user: dict = Depends(get_current_user),
+    identity: dict = Depends(get_current_user),
     service: UserService = Depends(get_user_service),
 ):
-    return await service.get_user_by_id(current_user["user_id"])
+    return await service.get_user_by_id(identity["user_id"])
 
 
 @router.get("/users")
@@ -120,16 +170,16 @@ async def get_users(
 
 @router.get("/documents")
 async def get_documents(
-    current_user: dict = Depends(get_current_user),
+    identity: dict = Depends(get_identity),
     db: AsyncSession = Depends(get_db),
 ):
-    return await list_documents(db, current_user["user_id"])
+    return await list_documents(db, identity["user_id"])
 
 
 @router.delete("/documents/{document_id}")
 async def delete_user_document(
     document_id: str,
-    current_user: dict = Depends(get_current_user),
+    identity: dict = Depends(get_identity),
     db: AsyncSession = Depends(get_db),
 ):
     # A malformed id must not reach the DB driver (it would surface as a 500).
@@ -138,7 +188,7 @@ async def delete_user_document(
     except (ValueError, TypeError, AttributeError):
         raise HTTPException(status_code=404, detail="Document not found")
 
-    success = await delete_document(db, current_user["user_id"], document_uuid)
+    success = await delete_document(db, identity["user_id"], document_uuid)
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
     await db.commit()
@@ -158,7 +208,7 @@ async def get_capabilities():
 @router.get("/ask")
 async def ask(
     question: str = Query(..., max_length=_MAX_QUESTION_LENGTH),
-    current_user: dict = Depends(get_current_user),
+    identity: dict = Depends(get_identity),
     request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
@@ -166,13 +216,14 @@ async def ask(
     # stream has started cannot become a clean 400 anymore.
     if not question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
-    enforce_rate_limit(
+    await enforce_identity_rate_limit(
         request,
-        f"ask:{current_user['user_id']}",
+        identity,
+        "ask",
         ASK_RATE_LIMIT_PER_MINUTE,
     )
     return StreamingResponse(
-        ask_question_stream(db, question, current_user["user_id"], history=[]),
+        ask_question_stream(db, question, identity["user_id"], history=[]),
         media_type="application/x-ndjson",
     )
 
@@ -180,20 +231,21 @@ async def ask(
 @router.post("/ask")
 async def ask_with_history(
     chat: ChatRequest,
-    current_user: dict = Depends(get_current_user),
+    identity: dict = Depends(get_identity),
     request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
-    enforce_rate_limit(
+    await enforce_identity_rate_limit(
         request,
-        f"ask:{current_user['user_id']}",
+        identity,
+        "ask",
         ASK_RATE_LIMIT_PER_MINUTE,
     )
     return StreamingResponse(
         ask_question_stream(
             db,
             chat.question,
-            current_user["user_id"],
+            identity["user_id"],
             history=[item.model_dump() for item in chat.history],
         ),
         media_type="application/x-ndjson",
@@ -206,15 +258,14 @@ _MAX_PDF_BYTES = 20 * 1024 * 1024  # 20 MB hard limit
 @router.post("/upload-pdf")
 async def upload_pdf(
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
+    identity: dict = Depends(get_identity),
     request: Request = None,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.core.logger import logger
-
-    enforce_rate_limit(
+    await enforce_identity_rate_limit(
         request,
-        f"upload:{current_user['user_id']}",
+        identity,
+        "upload",
         UPLOAD_RATE_LIMIT_PER_MINUTE,
     )
 
@@ -271,7 +322,7 @@ async def upload_pdf(
         logger.info(
             "upload-pdf: extracting text from '%s' (user_id=%s)",
             filename,
-            current_user["user_id"],
+            identity["user_id"],
         )
         text = (await run_in_threadpool(extract_text_from_pdf, file_path)).strip()
         if not text:
@@ -289,12 +340,12 @@ async def upload_pdf(
             "upload-pdf: produced %d chunks for '%s' (user_id=%s)",
             len(chunks),
             filename,
-            current_user["user_id"],
+            identity["user_id"],
         )
 
         # --- Persist header first (rolled back on any later failure) ---
         document_record = await create_document_record(
-            db, current_user["user_id"], filename
+            db, identity["user_id"], filename
         )
 
         # --- Embed + insert in bounded batches ---
@@ -310,7 +361,7 @@ async def upload_pdf(
                 )
             await store_documents_bulk(
                 db,
-                current_user["user_id"],
+                identity["user_id"],
                 document_record.id,
                 list(zip(batch, embeddings)),
             )
@@ -323,7 +374,7 @@ async def upload_pdf(
             document_record.id,
             filename,
             len(chunks),
-            current_user["user_id"],
+            identity["user_id"],
         )
 
     except HTTPException:
@@ -334,7 +385,7 @@ async def upload_pdf(
         logger.error(
             "upload-pdf: unexpected error for '%s' (user_id=%s): %s",
             filename,
-            current_user["user_id"],
+            identity["user_id"],
             exc,
             exc_info=True,
         )

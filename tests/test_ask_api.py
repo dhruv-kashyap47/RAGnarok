@@ -234,3 +234,38 @@ def test_generation_failure_becomes_in_stream_error_chunk(
     chunks = [e for e in events[1:] if e["type"] == "chunk"]
     assert chunks
     assert "[Error: Stream generation failed]" in chunks[0]["content"]
+
+
+# --- Guest asking ----------------------------------------------------------
+
+
+def test_guest_can_ask_without_an_account(client, guest_account, mock_ask):
+    """Guest-first UX: /ask works with a guest token before any signup."""
+    response = client.get(
+        "/ask", params={"question": "What is RAG?"}, headers=guest_account["headers"]
+    )
+    assert response.status_code == 200
+    events = _parse_stream(response.text)
+    assert events[0]["type"] == "metadata"
+    chunks = [e for e in events[1:] if e["type"] == "chunk"]
+    assert "".join(c["content"] for c in chunks) == "Hello world"
+    assert any("RAG" in p for p in mock_ask["prompts"])
+
+
+def test_guest_ask_sees_only_own_documents(
+    client, guest_account, mock_ask, mock_embeddings
+):
+    """A guest's retrieval must not reach other tenants' documents."""
+    _upload(client, guest_account["headers"])
+
+    other = client.post("/guest-session").json()
+    other_headers = {"Authorization": f"Bearer {other['access_token']}"}
+
+    response = client.get(
+        "/ask", params={"question": "revenue?"}, headers=other_headers
+    )
+    assert response.status_code == 200
+    metadata = _parse_stream(response.text)[0]
+    assert metadata["sources"] == []
+    assert metadata["used_context"] is False
+    assert "revenue grew 18 percent" not in mock_ask["prompts"][0]
