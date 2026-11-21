@@ -94,7 +94,9 @@ automatically.
 - **Backend:** FastAPI, SQLAlchemy, HTTPX
 - **Database:** PostgreSQL + pgvector with an HNSW index
 - **Cache and limits:** Redis
-- **LLM:** Groq `llama-3.1-8b-instant` on the free developer tier
+- **LLM:** Groq `openai/gpt-oss-20b` on the free developer tier, with
+  configurable fallback models and automatic discovery through Groq's
+  `/models` endpoint if a model is retired
 - **Embeddings:** Gemini `gemini-embedding-001`, requested at 768 dimensions.
   Groq is chat-only because its `nomic-embed-text-v1_5` embedding model returns
   404 for normal API keys.
@@ -119,7 +121,8 @@ Create `.env` in the repository root:
 ```env
 SECRET_KEY=use-a-strong-random-64-char-string
 GROQ_API_KEY=your_key_here
-GROQ_CHAT_MODEL=llama-3.1-8b-instant
+GROQ_CHAT_MODEL=openai/gpt-oss-20b
+GROQ_FALLBACK_MODELS=openai/gpt-oss-120b,qwen/qwen3.8-27b
 GEMINI_API_KEY=your_key_here
 GEMINI_EMBED_MODEL=gemini-embedding-001
 EMBEDDING_DIMENSIONS=768
@@ -199,7 +202,14 @@ send `X-Guest-Token` when creating or signing into an account.
 
 The `/ask` response is newline-delimited JSON. It starts with a metadata packet
 containing sources, retrieval status, and warnings, followed by chunk packets
-containing answer text.
+containing answer text. If generation fails mid-stream, the stream ends with an
+`error` packet (`{"type": "error", "message": "...", "retryable": true}`) instead
+of an HTTP error, so the UI can offer a retry.
+
+Groq retires models regularly, so `GROQ_CHAT_MODEL` is tried first and
+`GROQ_FALLBACK_MODELS` after it. If every configured model is gone, the backend
+fetches `/models` from Groq and uses the first available chat model; the working
+model is then reused for the life of the process.
 
 ---
 

@@ -93,7 +93,16 @@ DOCS_ENABLED = get_bool_env("DOCS_ENABLED", True)
 # Groq serves chat completions (free developer tier models).
 GROQ_API_KEY = get_env("GROQ_API_KEY")
 GROQ_API_BASE = get_env("GROQ_API_BASE", "https://api.groq.com/openai/v1")
-GROQ_CHAT_MODEL = get_env("GROQ_CHAT_MODEL", "llama-3.1-8b-instant")
+# Groq retires models regularly (llama-3.1-8b-instant now 404s). The primary is
+# tried first; fallbacks are only used when the primary is gone, rate limited
+# or erroring. If every configured model is unavailable, llm_service asks
+# Groq's /models endpoint for a working chat model so a stale env var cannot
+# take answering down.
+GROQ_CHAT_MODEL = get_env("GROQ_CHAT_MODEL", "openai/gpt-oss-20b")
+GROQ_FALLBACK_MODELS = get_list_env(
+    "GROQ_FALLBACK_MODELS",
+    ["openai/gpt-oss-120b", "qwen/qwen3.8-27b"],
+)
 
 # Embeddings run on Gemini: Groq's `nomic-embed-text-v1_5` model is not
 # available to normal API keys (POST /embeddings returns 404), so it cannot

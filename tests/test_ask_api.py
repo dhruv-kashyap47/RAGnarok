@@ -210,11 +210,12 @@ def test_retrieval_failure_still_streams_with_warning(
     assert any(e["type"] == "chunk" for e in events[1:])
 
 
-def test_generation_failure_becomes_in_stream_error_chunk(
+def test_generation_failure_becomes_structured_error_event(
     client, account, monkeypatch
 ):
     """A mid-request LLM failure must surface as an in-stream error event
-    after the metadata line, not as a dropped connection."""
+    after the metadata line, not as a dropped connection or a diagnostic
+    string rendered inside the answer."""
 
     async def broken_stream(prompt):
         raise RuntimeError("llm down")
@@ -231,9 +232,14 @@ def test_generation_failure_becomes_in_stream_error_chunk(
 
     events = _parse_stream(response.text)
     assert events[0]["type"] == "metadata"
-    chunks = [e for e in events[1:] if e["type"] == "chunk"]
-    assert chunks
-    assert "[Error: Stream generation failed]" in chunks[0]["content"]
+    assert all(e["type"] != "chunk" for e in events[1:])
+    errors = [e for e in events if e["type"] == "error"]
+    assert len(errors) == 1
+    assert errors[0]["retryable"] is True
+    assert errors[0]["message"]
+    # Provider internals stay out of the user-facing payload.
+    assert "llm down" not in errors[0]["message"]
+    assert "[Error:" not in response.text
 
 
 # --- Guest asking ----------------------------------------------------------

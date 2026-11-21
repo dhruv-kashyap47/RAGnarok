@@ -3506,6 +3506,7 @@
         pendingDeleteId: null,
         stickToBottom: true,
         healthChecked: false,
+        healthKind: "checking",
         lastUpload: null,
       };
 
@@ -4435,6 +4436,7 @@
       }
 
       function setHealth(kind, heading, copy) {
+        state.healthKind = kind;
         const dotClass = `status-dot ${
           kind === "live"
             ? "live"
@@ -4461,6 +4463,24 @@
         q("health-copy").title = copy;
       }
 
+      function clearHealthRetry() {
+        if (startHealthPolling.retryTimer) {
+          window.clearTimeout(startHealthPolling.retryTimer);
+          startHealthPolling.retryTimer = null;
+        }
+      }
+
+      function scheduleHealthRetry() {
+        clearHealthRetry();
+        // Cold starts (free hosting tiers) take tens of seconds. Poll quickly
+        // while the backend looks down so the stale "unavailable" banner
+        // clears as soon as the server answers, instead of waiting 30s.
+        startHealthPolling.retryTimer = window.setTimeout(() => {
+          startHealthPolling.retryTimer = null;
+          if (!document.hidden) checkHealth();
+        }, 5000);
+      }
+
       async function checkHealth() {
         if (!state.healthChecked) {
           setHealth(
@@ -4473,6 +4493,7 @@
         try {
           const data = await apiFetch("/health", { headers: {} });
           state.healthChecked = true;
+          clearHealthRetry();
           const embeddings = data.embeddings || {};
 
           if (embeddings.ok === false) {
@@ -4501,6 +4522,7 @@
         } catch (error) {
           state.healthChecked = true;
           setHealth("down", "Backend unavailable", error.message);
+          scheduleHealthRetry();
         }
       }
 
@@ -4510,9 +4532,15 @@
         startHealthPolling.timer = window.setInterval(() => {
           if (!document.hidden) checkHealth();
         }, 30000);
-        window.addEventListener("online", checkHealth);
+        window.addEventListener("online", () => {
+          clearHealthRetry();
+          checkHealth();
+        });
         document.addEventListener("visibilitychange", () => {
-          if (!document.hidden) checkHealth();
+          if (!document.hidden) {
+            clearHealthRetry();
+            checkHealth();
+          }
         });
       }
 
@@ -5183,9 +5211,14 @@
             throw new Error("The server did not return a response stream.");
           }
 
+          // This request reached the backend, so it is definitely up; clear a
+          // stale "Backend unavailable" banner left over from a cold start.
+          if (state.healthKind !== "live") checkHealth();
+
           const reader = response.body.getReader();
           const decoder = new TextDecoder("utf-8");
           let buffer = "";
+          let streamError = "";
 
           thinkingMessage.thinking = false;
           thinkingMessage.typing = true;
@@ -5216,6 +5249,14 @@
                 } else if (packet.type === "chunk") {
                   thinkingMessage.content += packet.content || "";
                   scheduleStreamRender();
+                } else if (packet.type === "error") {
+                  streamError =
+                    normalizeMessageText(packet.message) ||
+                    "The language model is temporarily unavailable. Please try again.";
+                  thinkingMessage.error = true;
+                  thinkingMessage.warning = "Generation failed";
+                  thinkingMessage.typing = false;
+                  scheduleStreamRender();
                 }
               } catch {
                 // Ignore malformed stream lines and keep reading.
@@ -5228,21 +5269,39 @@
               const packet = JSON.parse(buffer);
               if (packet.type === "chunk") {
                 thinkingMessage.content += packet.content || "";
+              } else if (packet.type === "error") {
+                streamError =
+                  normalizeMessageText(packet.message) ||
+                  "The language model is temporarily unavailable. Please try again.";
               }
             } catch {
               // Ignore a trailing partial line.
             }
           }
 
-          if (!normalizeMessageText(thinkingMessage.content)) {
-            thinkingMessage.content = "No answer was returned. Please try again.";
-          }
           thinkingMessage.typing = false;
-          thinkingMessage.error = false;
+          if (streamError) {
+            // Keep any sources that were already reported: the documents were
+            // found, only the answer generation failed.
+            thinkingMessage.error = true;
+            thinkingMessage.warning = "Generation failed";
+            thinkingMessage.typing = false;
+            if (!normalizeMessageText(thinkingMessage.content)) {
+              thinkingMessage.content = streamError;
+            }
+            showAlert("chat-alert", streamError, "error");
+            announce("Request failed.");
+          } else {
+            if (!normalizeMessageText(thinkingMessage.content)) {
+              thinkingMessage.content =
+                "No answer was returned. Please try again.";
+            }
+            thinkingMessage.error = false;
+            announce("Answer ready.");
+          }
           persistConversations();
           renderConvList();
           renderMessages();
-          announce("Answer ready.");
         } catch (error) {
           thinkingMessage.thinking = false;
           thinkingMessage.typing = false;

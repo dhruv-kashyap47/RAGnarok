@@ -135,5 +135,17 @@ async def ask_question_stream(
         async for chunk in stream_generate_answer(_build_prompt(question, history, results)):
             yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
     except Exception as exc:  # noqa: BLE001 — convert to an in-stream error event
+        # The stream already started, so the status line is a 200. Send a
+        # structured error packet: the UI can show a retryable failure instead
+        # of rendering a diagnostic string inside the answer. Provider internals
+        # stay in the logs; users get an actionable message.
         logger.error("Generation failed for user_id=%s: %s", user_id, exc)
-        yield json.dumps({"type": "chunk", "content": "\n[Error: Stream generation failed]"}) + "\n"
+        detail = getattr(exc, "detail", None)
+        if detail:
+            logger.error("Generation failure detail: %s", detail)
+        message = (
+            "The language model is temporarily unavailable. "
+            "Please try again in a few moments."
+        )
+        payload = {"type": "error", "message": message, "retryable": True}
+        yield json.dumps(payload) + "\n"
