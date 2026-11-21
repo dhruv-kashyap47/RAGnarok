@@ -208,6 +208,155 @@
         border-color: #565656;
       }
 
+      /* ---------------- Animated sigils ---------------- */
+
+      .sigil {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 80%;
+        height: 80%;
+        color: inherit;
+        pointer-events: none;
+        transition: transform 0.25s ease;
+      }
+
+      .sigil svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        fill: none;
+        stroke: currentColor;
+      }
+
+      .sigil svg * {
+        vector-effect: non-scaling-stroke;
+      }
+
+      .sigil-orbit {
+        transform-origin: 50% 50%;
+        animation: sigilSpin 3.8s linear infinite;
+      }
+
+      .sigil-inner {
+        transform-origin: 50% 50%;
+        animation: sigilSpin 6.4s linear infinite reverse;
+      }
+
+      .rail-brand:hover .sigil {
+        transform: scale(1.06);
+      }
+
+      .rail-brand:hover .sigil-orbit {
+        animation-duration: 1.2s;
+      }
+
+      .rail-brand:hover .sigil-inner {
+        animation-duration: 2.2s;
+      }
+
+      .sigil-track,
+      .sigil-inner-track {
+        stroke: currentColor;
+        opacity: 0.12;
+        stroke-width: 1;
+      }
+
+      .sigil-arc-a {
+        stroke: var(--accent-blue);
+        opacity: 0.92;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-dasharray: 18 111;
+      }
+
+      .sigil-arc-b {
+        stroke: var(--accent-lilac);
+        opacity: 0.88;
+        stroke-width: 1.4;
+        stroke-linecap: round;
+        stroke-dasharray: 9 120;
+        stroke-dashoffset: -58;
+      }
+
+      .sigil-arc-c {
+        stroke: #ffffff;
+        opacity: 0.7;
+        stroke-width: 1.1;
+        stroke-linecap: round;
+        stroke-dasharray: 2 126;
+        stroke-dashoffset: -26;
+      }
+
+      .sigil-inner-arc {
+        stroke: currentColor;
+        opacity: 0.45;
+        stroke-width: 1.1;
+        stroke-linecap: round;
+        stroke-dasharray: 14 83;
+      }
+
+      .sigil-rune {
+        animation: sigilPulse 3.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+      }
+
+      .sigil-rune path,
+      .sigil-rune circle {
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .sigil-rune .sigil-frame {
+        stroke-width: 0.9;
+        opacity: 0.18;
+      }
+
+      .sigil-rune .sigil-glyph {
+        stroke-width: 2;
+      }
+
+      .sigil-rune .sigil-glint {
+        stroke: #ffffff;
+        stroke-width: 2.4;
+        stroke-dasharray: 14 100;
+        stroke-dashoffset: 0;
+        opacity: 0;
+        filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.65));
+        animation: sigilGlint 3.8s ease-in-out infinite;
+      }
+
+      .sigil-crest .sigil-orbit {
+        animation-duration: 5.2s;
+        animation-direction: reverse;
+      }
+
+      .sigil-crest .sigil-inner {
+        animation-duration: 7.4s;
+      }
+
+      .sigil-crest .sigil-rune {
+        animation-duration: 5.2s;
+      }
+
+      .assistant-mark .sigil-inner,
+      .assistant-mark .sigil-frame,
+      .assistant-mark .sigil-glint {
+        display: none;
+      }
+
+      .assistant-mark .sigil-orbit {
+        animation-duration: 7s;
+      }
+
+      .assistant-mark .sigil-arc-a,
+      .assistant-mark .sigil-arc-b {
+        stroke: currentColor;
+        opacity: 0.55;
+      }
+
       .rail-btn {
         position: relative;
         display: grid;
@@ -312,6 +461,13 @@
         color: var(--ink);
         font-size: 0.72rem;
         font-weight: 600;
+      }
+
+      #rail-avatar-letter {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
       }
 
       .rail-btn[data-tip]::after {
@@ -747,6 +903,31 @@
         background: var(--canvas);
       }
 
+      .main::before {
+        content: "";
+        position: absolute;
+        inset: -6% -4%;
+        z-index: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(
+            55% 45% at 50% -8%,
+            rgba(255, 255, 255, 0.035),
+            transparent 70%
+          ),
+          radial-gradient(
+            45% 40% at 102% 104%,
+            rgba(255, 255, 255, 0.022),
+            transparent 70%
+          ),
+          radial-gradient(
+            40% 35% at -4% 88%,
+            rgba(255, 255, 255, 0.016),
+            transparent 72%
+          );
+        animation: ambientDrift 26s ease-in-out infinite alternate;
+      }
+
       .topbar {
         position: relative;
         z-index: 5;
@@ -829,9 +1010,12 @@
       /* ---------------- Conversation stream ---------------- */
 
       .stream {
+        position: relative;
+        z-index: 1;
         flex: 1;
         overflow-y: auto;
         scroll-behavior: smooth;
+        overscroll-behavior: contain;
       }
 
       .stream-inner {
@@ -886,12 +1070,16 @@
         height: 54px;
         margin-bottom: 24px;
         border-radius: 16px;
-        background: var(--action);
+        background:
+          linear-gradient(145deg, #ffffff, #e9e9e9);
         color: #111111;
         font-size: 1.18rem;
         font-weight: 700;
         letter-spacing: -0.03em;
-        box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.02);
+        box-shadow:
+          0 0 0 8px rgba(255, 255, 255, 0.02),
+          0 18px 40px rgba(0, 0, 0, 0.4);
+        animation: markFloat 6.5s ease-in-out infinite;
       }
 
       .empty h2 {
@@ -994,6 +1182,26 @@
         max-width: 620px;
       }
 
+      .chips .chip {
+        animation: riseIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      .chips .chip:nth-child(1) {
+        animation-delay: 0.04s;
+      }
+
+      .chips .chip:nth-child(2) {
+        animation-delay: 0.09s;
+      }
+
+      .chips .chip:nth-child(3) {
+        animation-delay: 0.14s;
+      }
+
+      .chips .chip:nth-child(4) {
+        animation-delay: 0.19s;
+      }
+
       .chip {
         display: flex;
         align-items: center;
@@ -1007,29 +1215,40 @@
         line-height: 1.4;
         text-align: left;
         transition:
-          background 0.15s ease,
-          border-color 0.15s ease,
-          color 0.15s ease,
-          transform 0.15s ease;
+          background 0.18s ease,
+          border-color 0.18s ease,
+          color 0.18s ease,
+          transform 0.18s ease,
+          box-shadow 0.18s ease;
       }
 
       .chip:hover {
         border-color: #5a5a5a;
         background: var(--surface-quiet);
         color: var(--ink);
-        transform: translateY(-1px);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+      }
+
+      .chip:hover .icon {
+        transform: scale(1.08);
       }
 
       .chip .icon {
         width: 16px;
         height: 16px;
         color: var(--accent-blue);
+        transition: transform 0.18s ease;
       }
 
       /* ---------------- Messages ---------------- */
 
       .turn {
-        animation: riseIn 0.28s ease both;
+        position: relative;
+      }
+
+      .turn-enter {
+        animation: turnIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
 
       .turn-user {
@@ -1048,6 +1267,18 @@
         line-height: 1.55;
         overflow-wrap: anywhere;
         white-space: pre-wrap;
+        transition:
+          border-color 0.2s ease,
+          background 0.2s ease,
+          transform 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+
+      .user-bubble:hover {
+        border-color: #565656;
+        background: #262626;
+        transform: translateY(-1px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
       }
 
       .assistant-head {
@@ -1058,6 +1289,7 @@
       }
 
       .assistant-mark {
+        position: relative;
         display: grid;
         place-items: center;
         width: 28px;
@@ -1068,6 +1300,15 @@
         color: var(--ink);
         font-size: 0.72rem;
         font-weight: 700;
+        transition:
+          border-color 0.3s ease,
+          background 0.3s ease,
+          box-shadow 0.3s ease;
+      }
+
+      .turn-assistant.is-processing .assistant-mark {
+        border-color: rgba(255, 255, 255, 0.16);
+        animation: markFade 3.4s ease-in-out infinite;
       }
 
       .assistant-name {
@@ -1233,41 +1474,215 @@
         display: inline-block;
         width: 2px;
         height: 1em;
-        margin-left: 2px;
-        background: var(--accent-blue);
+        margin-left: 3px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.65);
         vertical-align: -2px;
         animation: caretBlink 0.9s steps(1) infinite;
       }
 
-      .thinking {
-        display: inline-flex;
+      /* ---------------- Thinking / retrieval process ---------------- */
+
+      .process {
+        display: flex;
+        flex-direction: column;
+        gap: 13px;
+        padding: 15px 16px 16px;
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 14px;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.024),
+          rgba(255, 255, 255, 0.008)
+        );
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        animation: processIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      .process-head {
+        display: flex;
         align-items: center;
-        gap: 9px;
-        min-height: 28px;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .process-ring {
+        width: 14px;
+        height: 14px;
+        flex: none;
+        transform-origin: 50% 50%;
+        animation: spin 0.95s linear infinite;
+      }
+
+      .process-ring circle {
+        fill: none;
+        stroke-width: 1.4;
+        vector-effect: non-scaling-stroke;
+      }
+
+      .process-ring-track {
+        stroke: rgba(255, 255, 255, 0.1);
+      }
+
+      .process-ring-arc {
+        stroke: rgba(255, 255, 255, 0.72);
+        stroke-linecap: round;
+        stroke-dasharray: 16 28;
+      }
+
+      .process-text {
+        overflow: hidden;
         color: var(--ink-muted);
-        font-size: 0.84rem;
+        font-size: 0.82rem;
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        animation: statusIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
 
-      .thinking-dots {
+      .process-count {
+        margin-left: auto;
+        color: #606060;
+        font-family: var(--font-mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.08em;
+        flex: none;
+        animation: statusIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      .process-track {
+        position: relative;
+        display: block;
+        height: 1px;
+        overflow: hidden;
+        border-radius: 1px;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .process-track span {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: -30%;
+        width: 26%;
+        border-radius: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.46),
+          transparent
+        );
+        animation: trackSlide 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+
+      .process-skeleton {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      .process-skeleton span {
+        display: block;
+        height: 7px;
+        border-radius: 4px;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0.03) 0%,
+          rgba(255, 255, 255, 0.075) 48%,
+          rgba(255, 255, 255, 0.03) 100%
+        );
+        background-size: 240% 100%;
+        animation: skeletonSweep 1.9s ease-in-out infinite;
+      }
+
+      .process-skeleton span:nth-child(1) {
+        width: 92%;
+      }
+
+      .process-skeleton span:nth-child(2) {
+        width: 74%;
+        animation-delay: 0.14s;
+      }
+
+      .process-skeleton span:nth-child(3) {
+        width: 58%;
+        animation-delay: 0.28s;
+      }
+
+      /* ---------------- Empty answer ---------------- */
+
+      .answer-empty {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 13px;
+        padding: 15px 16px;
+        border: 1px dashed rgba(255, 255, 255, 0.14);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.02);
+        animation: processIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      .answer-empty-icon {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.055);
+        color: var(--ink-muted);
+        flex-shrink: 0;
+      }
+
+      .answer-empty-copy {
+        flex: 1;
+        min-width: 180px;
+      }
+
+      .answer-empty-copy strong {
+        display: block;
+        color: var(--ink);
+        font-size: 0.82rem;
+        font-weight: 600;
+      }
+
+      .answer-empty-copy p {
+        margin: 3px 0 0;
+        color: var(--ink-muted);
+        font-size: 0.76rem;
+        line-height: 1.5;
+      }
+
+      .retry-btn {
         display: inline-flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
+        height: 32px;
+        padding: 0 13px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface-quiet);
+        color: var(--ink);
+        font-size: 0.72rem;
+        font-weight: 500;
+        transition:
+          border-color 0.18s ease,
+          background 0.18s ease,
+          transform 0.18s ease,
+          box-shadow 0.18s ease;
       }
 
-      .thinking-dots span {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: var(--ink-muted);
-        animation: dotPulse 1.1s ease-in-out infinite;
+      .retry-btn:hover {
+        border-color: #606060;
+        background: #383838;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
       }
 
-      .thinking-dots span:nth-child(2) {
-        animation-delay: 0.16s;
-      }
-
-      .thinking-dots span:nth-child(3) {
-        animation-delay: 0.32s;
+      .retry-btn .icon {
+        width: 13px;
+        height: 13px;
       }
 
       .flags {
@@ -1331,6 +1746,16 @@
         background: var(--surface);
         color: var(--ink-soft);
         font-size: 0.7rem;
+        transition:
+          border-color 0.18s ease,
+          background 0.18s ease,
+          transform 0.18s ease;
+      }
+
+      .source:hover {
+        border-color: rgba(255, 255, 255, 0.22);
+        background: #262626;
+        transform: translateY(-1px);
       }
 
       .source .icon {
@@ -1401,6 +1826,7 @@
       }
 
       .composer-bar {
+        position: relative;
         display: flex;
         align-items: flex-end;
         gap: 7px;
@@ -1409,15 +1835,44 @@
         border-radius: 24px;
         background: var(--surface);
         transition:
-          border-color 0.15s ease,
-          box-shadow 0.15s ease;
+          border-color 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+
+      .composer-bar::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        padding: 1px;
+        border-radius: inherit;
+        background: linear-gradient(
+          120deg,
+          rgba(255, 255, 255, 0.22),
+          rgba(255, 255, 255, 0.06),
+          rgba(255, 255, 255, 0.18)
+        );
+        -webkit-mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 0.35s ease;
+        pointer-events: none;
       }
 
       .composer-bar:focus-within {
         border-color: #5c5c5c;
         box-shadow:
-          0 0 0 3px rgba(255, 255, 255, 0.045),
-          0 14px 40px rgba(0, 0, 0, 0.34);
+          0 0 0 3px rgba(255, 255, 255, 0.035),
+          0 14px 38px rgba(0, 0, 0, 0.36);
+      }
+
+      .composer-bar:focus-within::before {
+        opacity: 1;
       }
 
       .composer-icon {
@@ -1471,12 +1926,23 @@
         color: #111111;
         flex-shrink: 0;
         transition:
-          background 0.15s ease,
-          transform 0.15s ease;
+          background 0.18s ease,
+          transform 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+
+      .send-btn .icon {
+        transition: transform 0.18s ease;
       }
 
       .send-btn:hover {
-        background: #e6e6e6;
+        background: #ffffff;
+        transform: translateY(-1px);
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+      }
+
+      .send-btn:hover .icon {
+        transform: translateY(-1px);
       }
 
       .send-btn:active {
@@ -1545,15 +2011,124 @@
         }
       }
 
-      @keyframes dotPulse {
+      @keyframes turnIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes processIn {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes statusIn {
+        from {
+          opacity: 0;
+          transform: translateY(3px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes skeletonSweep {
+        0% {
+          background-position: 120% 0;
+        }
+        100% {
+          background-position: -120% 0;
+        }
+      }
+
+      @keyframes trackSlide {
+        from {
+          left: -30%;
+        }
+        to {
+          left: 100%;
+        }
+      }
+
+      @keyframes ambientDrift {
+        from {
+          transform: translateY(-0.5%) scale(1);
+        }
+        to {
+          transform: translateY(1%) scale(1.02);
+        }
+      }
+
+      @keyframes sigilSpin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes sigilPulse {
+        0%,
+        56%,
+        78%,
+        100% {
+          transform: scale(1);
+        }
+        64% {
+          transform: scale(1.07);
+        }
+        72% {
+          transform: scale(1);
+        }
+      }
+
+      @keyframes sigilGlint {
+        0%,
+        52% {
+          opacity: 0;
+          stroke-dashoffset: 0;
+        }
+        57% {
+          opacity: 1;
+        }
+        79% {
+          opacity: 1;
+          stroke-dashoffset: -100;
+        }
+        84%,
+        100% {
+          opacity: 0;
+          stroke-dashoffset: -100;
+        }
+      }
+
+      @keyframes markFade {
         0%,
         100% {
-          opacity: 0.25;
-          transform: translateY(0);
+          opacity: 0.7;
         }
         50% {
           opacity: 1;
-          transform: translateY(-2px);
+        }
+      }
+
+      @keyframes markFloat {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-3px);
         }
       }
 
@@ -2926,7 +3501,7 @@
           aria-label="Start a new conversation"
           title="RAGnarok"
         >
-          R
+          <span class="sigil" aria-hidden="true"><svg class="sigil-orbit" viewBox="0 0 48 48"><circle class="sigil-track" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-a" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-b" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-c" cx="24" cy="24" r="20.5"/></svg><svg class="sigil-inner" viewBox="0 0 48 48"><circle class="sigil-inner-track" cx="24" cy="24" r="15.5"/><circle class="sigil-inner-arc" cx="24" cy="24" r="15.5"/></svg><svg class="sigil-rune" viewBox="0 0 48 48"><path class="sigil-frame" d="M24 8.5 37 16v16L24 39.5 11 32V16Z"/><path class="sigil-glyph" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/><path class="sigil-glint" pathLength="100" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/></svg></span>
         </button>
         <button
           class="rail-btn primary"
@@ -2986,14 +3561,14 @@
           aria-label="Account and session"
           data-tip="Account"
         >
-          <span id="rail-avatar-letter">G</span>
+          <span id="rail-avatar-letter"><span class="sigil sigil-crest" aria-hidden="true"><svg class="sigil-orbit" viewBox="0 0 48 48"><circle class="sigil-track" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-a" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-b" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-c" cx="24" cy="24" r="20.5"/></svg><svg class="sigil-inner" viewBox="0 0 48 48"><circle class="sigil-inner-track" cx="24" cy="24" r="15.5"/><circle class="sigil-inner-arc" cx="24" cy="24" r="15.5"/></svg><svg class="sigil-rune" viewBox="0 0 48 48"><path class="sigil-frame" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z"/><path class="sigil-glint" pathLength="100" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z"/><circle cx="24" cy="21" r="3.6"/><path d="M18.2 30.4c1.5-3.3 3.4-5 5.8-5s4.3 1.7 5.8 5"/></svg></span></span>
         </button>
       </nav>
 
       <aside class="library" id="library" aria-label="Conversations and account">
         <header class="library-head">
           <div class="wordmark">
-            <span class="wordmark-mark">R</span>
+            <span class="wordmark-mark"><span class="sigil" aria-hidden="true"><svg class="sigil-orbit" viewBox="0 0 48 48"><circle class="sigil-track" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-a" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-b" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-c" cx="24" cy="24" r="20.5"/></svg><svg class="sigil-inner" viewBox="0 0 48 48"><circle class="sigil-inner-track" cx="24" cy="24" r="15.5"/><circle class="sigil-inner-arc" cx="24" cy="24" r="15.5"/></svg><svg class="sigil-rune" viewBox="0 0 48 48"><path class="sigil-frame" d="M24 8.5 37 16v16L24 39.5 11 32V16Z"/><path class="sigil-glyph" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/><path class="sigil-glint" pathLength="100" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/></svg></span></span>
             <span class="wordmark-copy">
               <strong>RAGnarok</strong>
               <small>Knowledge engine</small>
@@ -3046,7 +3621,7 @@
 
         <footer class="library-foot">
           <div class="account-card">
-            <span class="avatar" id="user-avatar">G</span>
+            <span class="avatar" id="user-avatar"><span class="sigil sigil-crest" aria-hidden="true"><svg class="sigil-orbit" viewBox="0 0 48 48"><circle class="sigil-track" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-a" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-b" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-c" cx="24" cy="24" r="20.5"/></svg><svg class="sigil-inner" viewBox="0 0 48 48"><circle class="sigil-inner-track" cx="24" cy="24" r="15.5"/><circle class="sigil-inner-arc" cx="24" cy="24" r="15.5"/></svg><svg class="sigil-rune" viewBox="0 0 48 48"><path class="sigil-frame" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z"/><path class="sigil-glint" pathLength="100" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z"/><circle cx="24" cy="21" r="3.6"/><path d="M18.2 30.4c1.5-3.3 3.4-5 5.8-5s4.3 1.7 5.8 5"/></svg></span></span>
             <span class="account-meta">
               <span id="user-email">Guest session</span>
               <small id="user-role">Guest</small>
@@ -3114,7 +3689,7 @@
         <div class="stream" id="chat-scroll">
           <div class="stream-inner" id="chat-stream">
             <div class="boot-state">
-              <div class="boot-mark">R</div>
+              <div class="boot-mark"><span class="sigil" aria-hidden="true"><svg class="sigil-orbit" viewBox="0 0 48 48"><circle class="sigil-track" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-a" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-b" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-c" cx="24" cy="24" r="20.5"/></svg><svg class="sigil-inner" viewBox="0 0 48 48"><circle class="sigil-inner-track" cx="24" cy="24" r="15.5"/><circle class="sigil-inner-arc" cx="24" cy="24" r="15.5"/></svg><svg class="sigil-rune" viewBox="0 0 48 48"><path class="sigil-frame" d="M24 8.5 37 16v16L24 39.5 11 32V16Z"/><path class="sigil-glyph" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/><path class="sigil-glint" pathLength="100" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/></svg></span></div>
               <p>Connecting to your knowledge base...</p>
             </div>
           </div>
@@ -3293,7 +3868,7 @@
         <section class="drawer-section">
           <h3>Session</h3>
           <div class="session-card">
-            <span class="avatar" id="drawer-avatar">G</span>
+            <span class="avatar" id="drawer-avatar"><span class="sigil sigil-crest" aria-hidden="true"><svg class="sigil-orbit" viewBox="0 0 48 48"><circle class="sigil-track" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-a" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-b" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-c" cx="24" cy="24" r="20.5"/></svg><svg class="sigil-inner" viewBox="0 0 48 48"><circle class="sigil-inner-track" cx="24" cy="24" r="15.5"/><circle class="sigil-inner-arc" cx="24" cy="24" r="15.5"/></svg><svg class="sigil-rune" viewBox="0 0 48 48"><path class="sigil-frame" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z"/><path class="sigil-glint" pathLength="100" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z"/><circle cx="24" cy="21" r="3.6"/><path d="M18.2 30.4c1.5-3.3 3.4-5 5.8-5s4.3 1.7 5.8 5"/></svg></span></span>
             <div>
               <strong id="drawer-email">Guest session</strong>
               <small id="drawer-role">Guest session</small>
@@ -3334,7 +3909,7 @@
       <div class="auth-shell">
         <section class="auth-hero">
           <div class="auth-brand">
-            <span class="wordmark-mark">R</span>
+            <span class="wordmark-mark"><span class="sigil" aria-hidden="true"><svg class="sigil-orbit" viewBox="0 0 48 48"><circle class="sigil-track" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-a" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-b" cx="24" cy="24" r="20.5"/><circle class="sigil-arc-c" cx="24" cy="24" r="20.5"/></svg><svg class="sigil-inner" viewBox="0 0 48 48"><circle class="sigil-inner-track" cx="24" cy="24" r="15.5"/><circle class="sigil-inner-arc" cx="24" cy="24" r="15.5"/></svg><svg class="sigil-rune" viewBox="0 0 48 48"><path class="sigil-frame" d="M24 8.5 37 16v16L24 39.5 11 32V16Z"/><path class="sigil-glyph" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/><path class="sigil-glint" pathLength="100" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8"/></svg></span></span>
             <span>RAGnarok</span>
           </div>
           <h1>Answers grounded in what you actually uploaded.</h1>
@@ -3532,6 +4107,51 @@
         localStorage.removeItem("rag_guest_email");
       }
 
+      function sigilMarkup() {
+        return `
+          <span class="sigil" aria-hidden="true">
+            <svg class="sigil-orbit" viewBox="0 0 48 48">
+              <circle class="sigil-track" cx="24" cy="24" r="20.5" />
+              <circle class="sigil-arc-a" cx="24" cy="24" r="20.5" />
+              <circle class="sigil-arc-b" cx="24" cy="24" r="20.5" />
+              <circle class="sigil-arc-c" cx="24" cy="24" r="20.5" />
+            </svg>
+            <svg class="sigil-inner" viewBox="0 0 48 48">
+              <circle class="sigil-inner-track" cx="24" cy="24" r="15.5" />
+              <circle class="sigil-inner-arc" cx="24" cy="24" r="15.5" />
+            </svg>
+            <svg class="sigil-rune" viewBox="0 0 48 48">
+              <path class="sigil-frame" d="M24 8.5 37 16v16L24 39.5 11 32V16Z" />
+              <path class="sigil-glyph" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8" />
+              <path class="sigil-glint" pathLength="100" d="M17.5 33.5V14.5h7.2a5.6 5.6 0 0 1 0 11.2h-7.2m7.2 0 6.3 7.8" />
+            </svg>
+          </span>
+        `;
+      }
+
+      function crestMarkup() {
+        return `
+          <span class="sigil sigil-crest" aria-hidden="true">
+            <svg class="sigil-orbit" viewBox="0 0 48 48">
+              <circle class="sigil-track" cx="24" cy="24" r="20.5" />
+              <circle class="sigil-arc-a" cx="24" cy="24" r="20.5" />
+              <circle class="sigil-arc-b" cx="24" cy="24" r="20.5" />
+              <circle class="sigil-arc-c" cx="24" cy="24" r="20.5" />
+            </svg>
+            <svg class="sigil-inner" viewBox="0 0 48 48">
+              <circle class="sigil-inner-track" cx="24" cy="24" r="15.5" />
+              <circle class="sigil-inner-arc" cx="24" cy="24" r="15.5" />
+            </svg>
+            <svg class="sigil-rune" viewBox="0 0 48 48">
+              <path class="sigil-frame" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z" />
+              <path class="sigil-glint" pathLength="100" d="M24 10.5 35 17.2v13.6L24 37.5 13 30.8V17.2Z" />
+              <circle cx="24" cy="21" r="3.6" />
+              <path d="M18.2 30.4c1.5-3.3 3.4-5 5.8-5s4.3 1.7 5.8 5" />
+            </svg>
+          </span>
+        `;
+      }
+
       function esc(value) {
         return String(value).replace(
           /[&<>"']/g,
@@ -3636,11 +4256,7 @@
         const data = await parseRes(response);
         if (!response.ok) {
           throw new Error(
-            typeof data === "string"
-              ? data
-              : data?.message ||
-                  data?.detail ||
-                  "Could not start a guest session.",
+            httpErrorMessage(response, data, "Could not start a guest session."),
           );
         }
 
@@ -3656,12 +4272,15 @@
 
       function renderIdentity(email, role, avatar) {
         const isGuest = role === "guest";
+        const avatarMarkup = isGuest
+          ? crestMarkup()
+          : esc(avatar || "U");
         ["user-avatar", "drawer-avatar"].forEach((id) => {
           const element = q(id);
-          if (element) element.textContent = avatar;
+          if (element) element.innerHTML = avatarMarkup;
         });
         const railAvatar = q("rail-avatar-letter");
-        if (railAvatar) railAvatar.textContent = avatar;
+        if (railAvatar) railAvatar.innerHTML = avatarMarkup;
 
         q("user-email").textContent = email;
         q("drawer-email").textContent = email;
@@ -3707,8 +4326,11 @@
                     warning: normalizeMessageText(message.warning),
                     error: Boolean(message.error),
                     stopped: Boolean(message.stopped),
+                    emptyAnswer: Boolean(message.emptyAnswer),
                   }))
-                  .filter((message) => message.content),
+                  .filter(
+                    (message) => message.content || message.emptyAnswer,
+                  ),
               })),
             }),
           );
@@ -3755,10 +4377,13 @@
                           warning: normalizeMessageText(message?.warning),
                           error: Boolean(message?.error),
                           stopped: Boolean(message?.stopped),
+                          emptyAnswer: Boolean(message?.emptyAnswer),
                           thinking: false,
                           typing: false,
                         }))
-                        .filter((message) => message.content)
+                        .filter(
+                          (message) => message.content || message.emptyAnswer,
+                        )
                     : [],
                 }))
                 .filter((conversation) => conversation.id)
@@ -4066,13 +4691,55 @@
       }
 
       async function parseRes(response) {
+        const contentType = (response.headers.get("content-type") || "").toLowerCase();
         const text = await response.text();
         if (!text) return null;
-        try {
-          return JSON.parse(text);
-        } catch {
-          return text;
+
+        if (contentType.includes("json") || /^\s*[\[{]/.test(text)) {
+          try {
+            return JSON.parse(text);
+          } catch {
+            return null;
+          }
         }
+
+        // A proxy or static file server can answer with an HTML error page.
+        // Never surface that markup in the UI.
+        if (/^\s*</.test(text)) return null;
+        return text;
+      }
+
+      function looksLikeHtml(value) {
+        return (
+          typeof value === "string" &&
+          /<\s*(?:!doctype|html|head|body)\b/i.test(value)
+        );
+      }
+
+      function httpErrorMessage(response, data, fallback = "Request failed. Please try again.") {
+        let message = "";
+        if (data && typeof data === "object") {
+          message = normalizeMessageText(data.message || data.detail || "");
+        } else if (typeof data === "string" && !looksLikeHtml(data)) {
+          message = normalizeMessageText(data);
+        }
+        if (message) return message;
+
+        const status = response?.status || 0;
+        if (status === 400) return "The request was not valid.";
+        if (status === 401) return "Your session expired. Please sign in again.";
+        if (status === 403) return "You do not have access to that.";
+        if (status === 404) return "The RAGnarok API was not found at this address.";
+        if (status === 409) return "That request conflicts with an existing item.";
+        if (status === 413) return "That file is too large.";
+        if (status === 415) return "That file type is not supported.";
+        if (status === 422) return "The request contained invalid data.";
+        if (status === 429) return "Too many requests. Please wait a moment.";
+        if (status === 501)
+          return "This address is serving static files, not the RAGnarok API. Open the app from the FastAPI server at /ui.";
+        if (status >= 500)
+          return "The server hit a problem. Please try again in a moment.";
+        return fallback;
       }
 
       async function handleSessionExpired() {
@@ -4130,18 +4797,13 @@
 
         const data = await parseRes(response);
         if (!response.ok) {
-          const message =
-            typeof data === "string"
-              ? data
-              : data?.message || data?.detail || "Request failed";
-
           if (response.status === 401 && !retried) {
             const recovered = await handleSessionExpired();
             if (recovered) return apiFetch(path, options, true, networkRetried);
             throw new Error("Session expired. Please sign in again.");
           }
 
-          throw new Error(message);
+          throw new Error(httpErrorMessage(response, data));
         }
 
         return data;
@@ -4896,19 +5558,85 @@
         return html;
       }
 
-      function thinkingMarkup() {
+      function processMarkup(message) {
+        const phase = message?.phase || "searching";
+        const sourceCount = Array.isArray(message?.sources)
+          ? message.sources.length
+          : 0;
+
+        let label = "Searching your documents";
+        if (phase === "reading") {
+          if (message?.retrievalStatus === "failed") {
+            label = "Retrieval is unavailable, answering directly";
+          } else if (sourceCount) {
+            label = `Reading ${sourceCount} source${sourceCount === 1 ? "" : "s"}`;
+          } else {
+            label = "Reviewing your library";
+          }
+        } else if (phase === "writing") {
+          label = "Composing your answer";
+        }
+
+        const phaseNumber = { searching: 1, reading: 2, writing: 3 }[phase] || 1;
+
         return `
-          <span class="thinking">
-            Searching your documents
-            <span class="thinking-dots" aria-hidden="true">
+          <div class="process" data-phase="${esc(phase)}" role="status" aria-live="polite">
+            <div class="process-head">
+              <svg class="process-ring" viewBox="0 0 20 20" aria-hidden="true">
+                <circle class="process-ring-track" cx="10" cy="10" r="7" />
+                <circle class="process-ring-arc" cx="10" cy="10" r="7" />
+              </svg>
+              <span class="process-text">${esc(label)}</span>
+              <span class="process-count">0${phaseNumber} / 03</span>
+            </div>
+            <span class="process-track" aria-hidden="true"><span></span></span>
+            <div class="process-skeleton" aria-hidden="true">
               <span></span><span></span><span></span>
-            </span>
-          </span>
+            </div>
+          </div>
         `;
       }
 
+      function emptyAnswerMarkup(index) {
+        return `
+          <div class="answer-empty">
+            <span class="answer-empty-icon">
+              <svg class="icon" aria-hidden="true"><use href="#i-spark"></use></svg>
+            </span>
+            <div class="answer-empty-copy">
+              <strong>That one needs another angle</strong>
+              <p>I couldn't compose a confident answer from your library. Try rephrasing it, or add a PDF that covers the topic.</p>
+            </div>
+            <button class="retry-btn" type="button" data-retry="${index}">
+              <svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg>
+              Retry
+            </button>
+          </div>
+        `;
+      }
+
+      function messageKey(conversation, index) {
+        return `${conversation.id}:${index}`;
+      }
+
+      const animatedTurns = new Set();
+
+      function turnEnterClass(conversation, index, message) {
+        const key = messageKey(conversation, index) + `:${message.createdAt || message.role}`;
+        if (animatedTurns.has(key)) return "";
+        animatedTurns.add(key);
+        return " turn-enter";
+      }
+
       function messageFlags(message) {
-        if (message.role !== "assistant" || message.thinking) return "";
+        if (
+          message.role !== "assistant" ||
+          message.thinking ||
+          message.typing ||
+          message.emptyAnswer
+        ) {
+          return "";
+        }
 
         if (message.error) {
           return `<div class="flags"><span class="flag err">${esc(
@@ -4952,6 +5680,7 @@
         if (
           message.role !== "assistant" ||
           message.thinking ||
+          message.emptyAnswer ||
           !Array.isArray(message.sources) ||
           !message.sources.length
         ) {
@@ -5017,7 +5746,7 @@
 
         return `
           <div class="empty">
-            <div class="empty-mark">R</div>
+            <div class="empty-mark">${sigilMarkup()}</div>
             <h2>Ask your documents anything</h2>
             <p>Upload a PDF, ask in plain language, and get answers with the exact sources attached.</p>
             ${intro}
@@ -5029,7 +5758,7 @@
       function bootStateMarkup() {
         return `
           <div class="boot-state">
-            <div class="boot-mark">R</div>
+            <div class="boot-mark">${sigilMarkup()}</div>
             <p>Connecting to your knowledge base...</p>
           </div>
         `;
@@ -5049,9 +5778,10 @@
 
         stream.innerHTML = conversation.messages
           .map((message, index) => {
+            const enter = turnEnterClass(conversation, index, message);
             if (message.role === "user") {
               return `
-                <div class="turn turn-user">
+                <div class="turn turn-user${enter}">
                   <div class="user-bubble">${esc(message.content)}</div>
                 </div>
               `;
@@ -5059,13 +5789,26 @@
 
             const thinking = Boolean(message.thinking);
             const typing = Boolean(message.typing);
-            const body = thinking
-              ? thinkingMarkup()
-              : renderMarkdown(message.content) ||
-                `<p>${esc(message.content || "No answer returned.")}</p>`;
-            const caret = typing ? '<span class="caret"></span>' : "";
+            const hasContent = Boolean(normalizeMessageText(message.content));
+            const processing = thinking || (typing && !hasContent);
+            const body = processing
+              ? processMarkup(
+                  thinking
+                    ? message
+                    : { ...message, phase: message.phase || "writing" },
+                )
+              : message.emptyAnswer && !hasContent
+                ? emptyAnswerMarkup(index)
+                : renderMarkdown(message.content) ||
+                  `<p>${esc(message.content)}</p>`;
+            const caret = typing && hasContent ? '<span class="caret"></span>' : "";
+            const stateLabel = thinking
+              ? '<span class="assistant-state" role="status">Thinking</span>'
+              : typing
+                ? '<span class="assistant-state">Writing</span>'
+                : "";
             const actions =
-              !thinking && !typing && normalizeMessageText(message.content)
+              !processing && hasContent
                 ? `
                   <div class="answer-actions">
                     <button class="action-btn" type="button" data-copy="${index}" aria-label="Copy answer" title="Copy answer">
@@ -5077,11 +5820,11 @@
                 : "";
 
             return `
-              <article class="turn turn-assistant">
+              <article class="turn turn-assistant${processing ? " is-processing" : ""}${enter}">
                 <div class="assistant-head">
-                  <span class="assistant-mark">R</span>
+                  <span class="assistant-mark">${sigilMarkup()}</span>
                   <span class="assistant-name">RAGnarok</span>
-                  ${typing ? '<span class="assistant-state">Writing</span>' : ""}
+                  ${stateLabel}
                 </div>
                 <div class="assistant-body">${body}${caret}</div>
                 ${sourcesMarkup(message)}
@@ -5181,12 +5924,15 @@
           content: "",
           thinking: true,
           typing: false,
+          phase: "searching",
           sources: [],
           usedContext: false,
           retrievalStatus: "empty",
           warning: "",
           error: false,
           stopped: false,
+          emptyAnswer: false,
+          createdAt: Date.now(),
         };
         conversation.messages.push(thinkingMessage);
 
@@ -5198,14 +5944,8 @@
         try {
           const response = await askRequest(text, history, state.controller.signal);
           if (!response.ok) {
-            let message = "Request failed";
-            try {
-              const errorData = await response.json();
-              message = errorData.message || errorData.detail || message;
-            } catch {
-              // Keep the generic message when the body is not JSON.
-            }
-            throw new Error(message);
+            const errorData = await parseRes(response);
+            throw new Error(httpErrorMessage(response, errorData));
           }
           if (!response.body) {
             throw new Error("The server did not return a response stream.");
@@ -5220,9 +5960,9 @@
           let buffer = "";
           let streamError = "";
 
-          thinkingMessage.thinking = false;
-          thinkingMessage.typing = true;
-          renderMessages();
+          // Keep the thinking card up until the first real token arrives, so
+          // the retrieval / composition animation is never swapped for an
+          // empty answer while the model is still working.
 
           while (true) {
             const { done, value } = await reader.read();
@@ -5245,8 +5985,16 @@
                     packet.retrieval_status ||
                     (thinkingMessage.usedContext ? "used" : "empty");
                   thinkingMessage.warning = normalizeMessageText(packet.warning);
+                  if (thinkingMessage.thinking) {
+                    thinkingMessage.phase = "reading";
+                  }
                   scheduleStreamRender();
                 } else if (packet.type === "chunk") {
+                  if (thinkingMessage.thinking) {
+                    thinkingMessage.thinking = false;
+                    thinkingMessage.typing = true;
+                    thinkingMessage.phase = null;
+                  }
                   thinkingMessage.content += packet.content || "";
                   scheduleStreamRender();
                 } else if (packet.type === "error") {
@@ -5255,7 +6003,9 @@
                     "The language model is temporarily unavailable. Please try again.";
                   thinkingMessage.error = true;
                   thinkingMessage.warning = "Generation failed";
+                  thinkingMessage.thinking = false;
                   thinkingMessage.typing = false;
+                  thinkingMessage.phase = null;
                   scheduleStreamRender();
                 }
               } catch {
@@ -5268,6 +6018,11 @@
             try {
               const packet = JSON.parse(buffer);
               if (packet.type === "chunk") {
+                if (thinkingMessage.thinking) {
+                  thinkingMessage.thinking = false;
+                  thinkingMessage.typing = true;
+                  thinkingMessage.phase = null;
+                }
                 thinkingMessage.content += packet.content || "";
               } else if (packet.type === "error") {
                 streamError =
@@ -5279,23 +6034,29 @@
             }
           }
 
+          thinkingMessage.thinking = false;
           thinkingMessage.typing = false;
+          thinkingMessage.phase = null;
           if (streamError) {
             // Keep any sources that were already reported: the documents were
             // found, only the answer generation failed.
             thinkingMessage.error = true;
             thinkingMessage.warning = "Generation failed";
-            thinkingMessage.typing = false;
             if (!normalizeMessageText(thinkingMessage.content)) {
               thinkingMessage.content = streamError;
             }
             showAlert("chat-alert", streamError, "error");
             announce("Request failed.");
+          } else if (!normalizeMessageText(thinkingMessage.content)) {
+            // The stream completed without a single token. Present a calm,
+            // retryable state instead of an empty "No answer" line.
+            thinkingMessage.emptyAnswer = true;
+            thinkingMessage.error = false;
+            thinkingMessage.warning = "";
+            thinkingMessage.sources = [];
+            thinkingMessage.usedContext = false;
+            announce("No answer was composed.");
           } else {
-            if (!normalizeMessageText(thinkingMessage.content)) {
-              thinkingMessage.content =
-                "No answer was returned. Please try again.";
-            }
             thinkingMessage.error = false;
             announce("Answer ready.");
           }
@@ -5305,6 +6066,8 @@
         } catch (error) {
           thinkingMessage.thinking = false;
           thinkingMessage.typing = false;
+          thinkingMessage.phase = null;
+          thinkingMessage.emptyAnswer = false;
 
           if (error?.name === "AbortError") {
             thinkingMessage.stopped = true;
@@ -5580,6 +6343,35 @@
           const conversation = activeConvo();
           const message = conversation?.messages?.[index];
           if (message) copyText(message.content);
+          return;
+        }
+
+        const retry = event.target.closest("[data-retry]");
+        if (retry && !state.sending) {
+          const index = Number(retry.dataset.retry);
+          const conversation = activeConvo();
+          if (!conversation) return;
+
+          let userIndex = -1;
+          for (let i = index - 1; i >= 0; i -= 1) {
+            if (conversation.messages[i]?.role === "user") {
+              userIndex = i;
+              break;
+            }
+          }
+          if (userIndex < 0) return;
+
+          const question = conversation.messages[userIndex];
+          conversation.messages.splice(
+            userIndex,
+            conversation.messages.length - userIndex,
+          );
+          const input = q("question-input");
+          input.value = question.content;
+          autoResize(input);
+          persistConversations();
+          renderMessages();
+          sendMessage();
         }
       });
 
